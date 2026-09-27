@@ -1,0 +1,14 @@
+# Private additions to repo/defaults/install.yaml (lists are merged).
+build:
+  apt: []
+  brew: []
+  npm: []
+  pip: []
+runtime:
+  marketplaces: []      # e.g. owner/repo or a git URL
+  plugins: []           # e.g. some-plugin@some-marketplace
+  skills: []
+  # skills:
+  #   - git: https://github.com/owner/skills-repo
+  #     path: skills/my-skill     # a skill dir, or a dir containing several skills
+  #     ref: main                 # optional branch/tag

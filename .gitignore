@@ -1,0 +1,6 @@
+# Personal config and state never belong in this repo.
+.env
+local/
+data/
+workspace/
+.DS_Store

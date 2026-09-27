@@ -1,0 +1,16 @@
+# Default packages, plugins and skills: generic, safe to publish.
+# Put personal additions in local/config/install.yaml (same schema). Lists are merged.
+build:            # baked into the image: `docker compose build` to apply
+  apt:
+    - ffmpeg      # voice notes / media conversion
+    - ripgrep
+    - python3
+  brew: []
+  npm: []
+  pip: []         # Python CLI tools, installed in isolation with `uv tool install`
+runtime:          # applied on every container start: `docker compose restart` to apply
+  marketplaces:
+    - Rich627/whatsapp-claude-plugin
+  plugins:
+    - whatsapp-channel@whatsapp-claude-plugin
+  skills: []

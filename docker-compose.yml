@@ -1,0 +1,48 @@
+# Everything personal lives in LOCAL_DIR (default ../local, a sibling of this repo).
+# Override with `LOCAL_DIR=/path docker compose ...` or a gitignored repo/.env file.
+name: claude-whatsapp
+
+services:
+  claude:
+    build:
+      context: .
+      dockerfile: claude/Dockerfile
+      additional_contexts:
+        local: ${LOCAL_DIR:-../local}/config
+    image: claude-whatsapp:latest
+    container_name: claude-whatsapp
+    hostname: claude-whatsapp
+    restart: unless-stopped
+    init: false            # tini is the image entrypoint
+    env_file:
+      - path: ${LOCAL_DIR:-../local}/.env
+        required: false
+    environment:
+      DISABLE_AUTOUPDATER: "1"   # update Claude by rebuilding the image
+    volumes:
+      - ${LOCAL_DIR:-../local}/config:/config
+      - ${LOCAL_DIR:-../local}/data/claude:/home/claude/.claude
+      - ${LOCAL_DIR:-../local}/data/whatsapp:/home/claude/.whatsapp-channel
+      - ${LOCAL_DIR:-../local}/workspace:/workspace
+    networks: [agents]
+
+  # --- Phase 2: a real Chrome, viewable over web VNC, driven by Claude in Chrome.
+  # chrome:
+  #   image: lscr.io/linuxserver/chrome:latest
+  #   container_name: claude-whatsapp-chrome
+  #   restart: unless-stopped
+  #   shm_size: 1gb
+  #   security_opt: [seccomp:unconfined]
+  #   environment:
+  #     PUID: "1000"
+  #     PGID: "1000"
+  #     TZ: ${TZ:-Europe/London}
+  #   ports:
+  #     - 127.0.0.1:3000:3000   # http VNC
+  #     - 127.0.0.1:3001:3001   # https VNC
+  #   volumes:
+  #     - ${LOCAL_DIR:-../local}/data/chrome:/config
+  #   networks: [agents]
+
+networks:
+  agents: {}
