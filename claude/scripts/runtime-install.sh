@@ -7,6 +7,14 @@ files=()
 for f in /opt/defaults/install.yaml /config/install.yaml; do [[ -s "$f" ]] && files+=("$f"); done
 [[ ${#files[@]} -eq 0 ]] && exit 0
 
+# Refuse to act on a file that doesn't parse, rather than treating it as empty.
+for f in "${files[@]}"; do
+  if ! err=$(yq eval '.' "$f" 2>&1 >/dev/null); then
+    echo "!! $f is not valid YAML, skipping runtime installs: $err" >&2
+    exit 1
+  fi
+done
+
 list() {
   yq eval-all ".runtime.$1 // [] | .[]" "${files[@]}" | grep -v '^---$' | awk 'NF && !seen[$0]++'
 }
@@ -68,5 +76,7 @@ while read -r entry; do
     done
   fi
 done
+
+sync-mcp.sh
 
 echo "==> runtime-install done"

@@ -26,6 +26,7 @@ auto_confirm_channels() {
 }
 
 while true; do
+  sync-mcp.sh || echo "!! sync-mcp failed (continuing)"
   args=(--dangerously-skip-permissions)
   for c in $channels; do args+=(--dangerously-load-development-channels "$c"); done
   [[ "${CLAUDE_CHROME:-0}" == 1 ]] && args+=(--chrome)

@@ -81,7 +81,23 @@ runtime:               # applied at every container start (restart to apply)
     - git: https://github.com/owner/skills-repo
       path: skills/my-skill      # one skill, or a folder of skills
       ref: main                  # optional
+  mcp:                           # MCP servers (same shape as .mcp.json)
+    github:
+      type: http
+      url: https://api.githubcopilot.com/mcp/
+      headers:
+        Authorization: Bearer ${GITHUB_TOKEN}   # value comes from local/.env
+    filesystem:
+      command: npx
+      args: [-y, "@modelcontextprotocol/server-filesystem", /workspace]
 ```
+
+MCP servers are written to Claude's user scope (`local/data/claude/.claude.json`)
+every time Claude starts, so after editing them, `/exit` in the session (or a
+container restart) is enough. `${VAR}` placeholders are filled from `local/.env`, so keep
+secrets there, not in `install.yaml`. If you remove a server from `install.yaml`,
+it's removed on the next restart. Servers you added by hand with `claude mcp add`
+are never touched.
 
 To add local skills, drop a folder containing a `SKILL.md` into
 `local/config/skills/`. Shareable skills go in `repo/defaults/skills/`.

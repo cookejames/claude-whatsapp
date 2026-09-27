@@ -14,3 +14,4 @@ runtime:          # applied on every container start: `docker compose restart` t
   plugins:
     - whatsapp-channel@whatsapp-claude-plugin
   skills: []
+  mcp: {}          # name -> server config, see local template for examples

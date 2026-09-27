@@ -12,3 +12,13 @@ runtime:
   #   - git: https://github.com/owner/skills-repo
   #     path: skills/my-skill     # a skill dir, or a dir containing several skills
   #     ref: main                 # optional branch/tag
+  mcp: {}
+  # mcp:                          # MCP servers, same shape as .mcp.json entries
+  #   github:
+  #     type: http
+  #     url: https://api.githubcopilot.com/mcp/
+  #     headers:
+  #       Authorization: Bearer ${GITHUB_TOKEN}   # filled from local/.env
+  #   filesystem:
+  #     command: npx
+  #     args: [-y, "@modelcontextprotocol/server-filesystem", /workspace]
