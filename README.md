@@ -102,6 +102,9 @@ To add local skills, drop a folder containing a `SKILL.md` into
 | `TZ` | `Europe/London` | Container time zone |
 | `CLAUDE_CONTINUE` | `1` | Resume the last conversation after a restart |
 | `CLAUDE_CHANNELS` | WhatsApp plugin | Space-separated channel plugins to load |
+| `CLAUDE_AUTO_CONFIRM_CHANNELS` | `1` | Accept the development-channels warning automatically on start |
+| `CLAUDE_REMOTE_CONTROL` | `1` | Enable Remote Control (open the session from claude.ai or the Claude app) |
+| `CLAUDE_REMOTE_CONTROL_NAME` | | Remote Control session name |
 | `CLAUDE_CHROME` | `0` | Start with `--chrome` (phase 2) |
 | `CLAUDE_EXTRA_ARGS` | | Extra `claude` arguments |
 
