@@ -19,10 +19,13 @@ for f in install.yaml CLAUDE.md settings.json; do
   fi
 done
 
-if [[ ! -e "$local_dir/.env" ]]; then
-  cp "$repo/.env.example" "$local_dir/.env"
-  echo "create $local_dir/.env"
-fi
+for pair in ".env.example:.env" "chrome.env.example:chrome.env"; do
+  src=${pair%%:*} dst=${pair#*:}
+  if [[ ! -e "$local_dir/$dst" ]]; then
+    cp "$repo/$src" "$local_dir/$dst"
+    echo "create $local_dir/$dst"
+  fi
+done
 
 echo
 echo "Now edit $local_dir/config/CLAUDE.md (who you are, allowed contacts)"

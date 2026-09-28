@@ -16,6 +16,7 @@ state="$CFG/.claude.json"
 [[ -s "$state" ]] || echo '{}' > "$state"
 tmp=$(mktemp)
 jq '.hasCompletedOnboarding = true
+    | .hasCompletedClaudeInChromeOnboarding = true
     | .projects["/workspace"].hasTrustDialogAccepted = true
     | .projects["/workspace"].hasCompletedProjectOnboarding = true' "$state" > "$tmp" && mv "$tmp" "$state"
 

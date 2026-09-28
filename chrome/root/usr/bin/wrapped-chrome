@@ -1,0 +1,10 @@
+#!/bin/bash
+# Replaces the image's wrapped-chrome (renamed to wrapped-chrome.orig) so extra
+# flags can contain spaces, which CHROME_CLI can't carry.
+#   CHROME_MAC_UA=1  macOS user agent matching this Chrome's major version
+args=()
+if [ "${CHROME_MAC_UA:-0}" = 1 ]; then
+  major=$(/usr/bin/google-chrome --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
+  args+=("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major:-0}.0.0.0 Safari/537.36")
+fi
+exec /usr/bin/wrapped-chrome.orig "${args[@]}" "$@"

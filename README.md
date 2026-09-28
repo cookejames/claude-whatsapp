@@ -18,7 +18,7 @@ survives restarts and rebuilds.
 - [Configuration reference](#configuration-reference)
 - [Troubleshooting](#troubleshooting)
 - [Security](#security)
-- [Roadmap: Chrome](#roadmap-chrome)
+- [Chrome](#chrome)
 
 ## How it works
 
@@ -38,11 +38,22 @@ survives restarts and rebuilds.
 │                    └─ claude --dangerously-skip-permissions                  │
 │                              --dangerously-load-development-channels …       │
 │                              --remote-control [name] [--continue]            │
-│                         └─ whatsapp-channel MCP server (Bun)                 │
+│                         ├─ whatsapp-channel MCP server (Bun)                 │
+│                         └─ Claude in Chrome tools (--chrome) ──────┐         │
+└────────────────────────────────────────────────────────────────────┼─────────┘
+        ▲                                   ▲                        │ wss
+        │ tmux attach                       │ Remote Control         ▼
+   you, in a terminal                claude.ai/code or the     Anthropic browser
+                                     Claude app                bridge (claude.ai
+                                                               account)
+                                                                     ▲ wss
+┌──────────────────────── container: claude-whatsapp-chrome ─────────┼─────────┐
+│ linuxserver/chrome: Google Chrome on a web desktop                 │         │
+│   └─ Claude in Chrome extension, signed in to the same account ────┘         │
 └──────────────────────────────────────────────────────────────────────────────┘
-        ▲                                   ▲
-        │ tmux attach                       │ Remote Control
-   you, in a terminal                claude.ai/code or the Claude app
+        ▲
+        │ https://localhost:3001 (this Mac only)
+   you, logging in to sites, watching Claude browse
 ```
 
 **One long-lived interactive session.** The WhatsApp plugin is a Claude Code
@@ -56,8 +67,9 @@ separate.
 **Startup sequence.** When the container starts, `entrypoint.sh`:
 
 1. Creates any missing files in `/config` from the templates.
-2. Marks onboarding complete and `/workspace` as trusted in `.claude.json`, so no
-   first-run screens block the session.
+2. Marks onboarding (including the Claude in Chrome intro) complete and
+   `/workspace` as trusted in `.claude.json`, so no first-run screens block the
+   session.
 3. Rebuilds `settings.json` from three layers: what Claude saved itself, then
    `defaults/settings.json`, then `local/config/settings.json`. Later layers win.
 4. Links the memory files: `defaults/CLAUDE.md` becomes Claude's user memory, and
@@ -88,6 +100,12 @@ reset happens on its next start. The date of the last reset is kept in
 Between resets, Claude compacts the conversation automatically when it nears
 the context limit, and you can run `/compact` yourself at any time.
 
+**Chrome.** A second container runs a real Google Chrome that you view in your
+browser. Claude drives it through the Claude in Chrome extension. The two
+containers don't talk to each other directly: Claude Code and the extension both
+connect to Anthropic's browser bridge using the same claude.ai account, and the
+bridge pairs them. See [Chrome](#chrome).
+
 **Public vs private.** The git repo (`repo/`) holds only generic, shareable
 material. Everything personal lives in a sibling `local/` folder that is never
 committed: phone numbers, names, tokens, the Claude login and the WhatsApp link.
@@ -101,9 +119,13 @@ claude-whatsapp/
 ├── repo/                        git repository (public-safe)
 │   ├── docker-compose.yml
 │   ├── .env.example             documents every env option
+│   ├── chrome.env.example       documents the Chrome container's options
 │   ├── claude/
 │   │   ├── Dockerfile           Debian + Homebrew, Node, Bun, uv, tmux, Claude Code
 │   │   └── scripts/             entrypoint, installers, restart loop, MCP sync
+│   ├── chrome/
+│   │   ├── Dockerfile           linuxserver/chrome, extension policy, user-agent wrapper
+│   │   └── root/                files copied into the Chrome image
 │   └── defaults/                baked into the image at /opt/defaults
 │       ├── install.yaml         base packages, WhatsApp marketplace and plugin
 │       ├── CLAUDE.md            generic WhatsApp assistant behaviour
@@ -111,11 +133,12 @@ claude-whatsapp/
 │       ├── skills/              shareable skills
 │       └── templates/           starting files for local/config
 └── local/                       private: never committed
-    ├── .env                     options and secrets → container env vars
+    ├── .env                     options and secrets → claude container env vars
+    ├── chrome.env               Chrome container options (never sees .env)
     ├── config/        → /config           install.yaml, CLAUDE.md, settings.json, skills/
     ├── data/claude/   → ~/.claude         login, plugins, MCP config, conversations
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
-    ├── data/chrome/                       reserved for the Chrome roadmap
+    ├── data/chrome/   → Chrome's /config  Chrome profile: logins, cookies, extension
     └── workspace/     → /workspace        Claude's working directory and notes
 ```
 
@@ -157,6 +180,7 @@ That creates `../local` from the templates. Then:
    Link a device → Link with phone number instead** and enter the code shown.
 7. Run `/whatsapp-channel:access` to allowlist the numbers that may talk to Claude.
 8. Detach with `Ctrl-b d`. Claude keeps running.
+9. Optionally, set up [Chrome](#chrome).
 
 ## Everyday use
 
@@ -168,6 +192,7 @@ That creates `../local` from the templates. Then:
 | Restart just Claude | Type `/exit` in the session |
 | See startup and install logs | `docker compose logs -f claude` |
 | Get a shell in the container | `docker compose exec claude bash` |
+| See or use Claude's Chrome | Open https://localhost:3001 (accept the self-signed certificate) |
 | Update Claude Code | `docker compose build --no-cache && docker compose up -d` (the auto-updater is off) |
 | Stop or start everything | `docker compose down` / `docker compose up -d` |
 
@@ -179,6 +204,7 @@ That creates `../local` from the templates. Then:
 | `install.yaml` → other `runtime` (plugins, skills), `settings.json`, skills folders | | ✓ | ✓ | ✓ |
 | `CLAUDE.md` files | ✓\* | ✓ | ✓ | ✓ |
 | `local/.env` | | | ✓ (recreates) | ✓ |
+| `local/chrome.env` | | | ✓ (recreates Chrome) | ✓ |
 | `install.yaml` → `build`, anything in `repo/` | | | | ✓ |
 
 \* `CLAUDE.md` files are read when a session starts, so an `/exit` picks them up.
@@ -245,9 +271,20 @@ runtime:               # applied when the container starts
 | `CLAUDE_AUTO_CONFIRM_CHANNELS` | `1` | Accept the development-channels warning automatically |
 | `CLAUDE_REMOTE_CONTROL` | `1` | Enable Remote Control |
 | `CLAUDE_REMOTE_CONTROL_NAME` | | Remote Control session name |
-| `CLAUDE_CHROME` | `0` | Start with `--chrome` (roadmap) |
+| `CLAUDE_CHROME` | `0` | Start with `--chrome` so Claude can drive the Chrome container |
+| `CLAUDE_CHROME_PAIRED_DEVICE_ID` | | Pin Claude to one browser by its extension device id (see [Chrome](#chrome)) |
 | `CLAUDE_EXTRA_ARGS` | | Extra arguments for `claude` |
 | *anything else* | | Available to MCP `${VAR}` placeholders and to Claude's shell, for example `HA_MCP_URL` |
+
+### Chrome options (`local/chrome.env`)
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TZ` | `Europe/London` | Chrome's time zone (keep it the same as yours) |
+| `CHROME_MAC_UA` | `0` | Give Chrome a macOS user agent matching its real version (see the caveat in [Chrome](#chrome)) |
+| `CHROME_CLI` | | Extra Chrome flags. Values can't contain spaces |
+| `CUSTOM_USER`, `PASSWORD` | | Basic auth for the web desktop |
+| `CHROME_PORT` | `3001` | Host port, set in your shell or `repo/.env` (not `chrome.env`) |
 
 ### Memory and settings
 
@@ -268,6 +305,10 @@ runtime:               # applied when the container starts
 | `.env` change ignored | Run `docker compose up -d` (a restart doesn't reload env). |
 | Session stuck on a prompt | Attach with `tmux attach -t claude` and answer it. |
 | Claude forgot something from yesterday | The daily reset started a new conversation. Ask Claude to keep lasting facts in `/workspace` notes or `CLAUDE.md`, or clear `CLAUDE_DAILY_RESET`. |
+| Claude says "Browser extension is not connected" | Open https://localhost:3001 and check that Chrome is running, the extension is installed and signed in to the same claude.ai account as Claude Code. If several browsers are connected, set `CLAUDE_CHROME_PAIRED_DEVICE_ID`. |
+| Claude drove the Chrome on your Mac | Both browsers are signed in to the same account. Pin the container's browser with `CLAUDE_CHROME_PAIRED_DEVICE_ID`. |
+| Extension missing from Chrome | It installs a few seconds after Chrome starts and needs access to the Chrome Web Store. Check `chrome://policy` in that Chrome for the `ExtensionSettings` policy. |
+| Chrome says the profile is in use | Chrome didn't shut down cleanly. `docker compose restart chrome`. |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 
 ## Security
@@ -283,13 +324,61 @@ runtime:               # applied when the container starts
   anywhere else with the same number.
 - Secrets belong in `local/.env` and are referenced as `${VAR}`. Never put them
   in `repo/`.
+- Whatever you log in to in Claude's Chrome, anyone on the WhatsApp allowlist can
+  use through Claude. Log in only to accounts you're happy to share that way.
+- The Chrome web desktop has no password by default and is published on
+  `127.0.0.1` only. Set `CUSTOM_USER`/`PASSWORD` in `local/chrome.env` if other
+  users share your Mac. The desktop has a terminal with passwordless `sudo`.
+- Chrome runs with `--no-sandbox` (required in the container), so the container
+  is the only isolation. Don't use it for general browsing.
 
-## Roadmap: Chrome
+## Chrome
 
-`docker-compose.yml` contains a commented-out `chrome` service
-(`lscr.io/linuxserver/chrome`) that you can view over web VNC on
-`localhost:3000`. The plan is for Claude to drive it through the Claude in Chrome
-extension. The extension's native-messaging Unix socket would be shared with the
-`claude` container over a shared volume, or relayed with socat as in
-[claude-code-remote-chrome](https://github.com/vaclavpavek/claude-code-remote-chrome).
-You would enable it with `CLAUDE_CHROME=1`.
+The `chrome` service runs Google Chrome
+([linuxserver/chrome](https://docs.linuxserver.io/images/docker-chrome/)) on a
+desktop you open at https://localhost:3001. Its profile, including logins,
+cookies and the extension, lives in `local/data/chrome`, so it survives rebuilds.
+Claude drives it with the Claude in Chrome tools.
+
+### How Claude reaches it
+
+Claude Code and the extension each open a WebSocket to Anthropic's browser bridge
+(`bridge.claudeusercontent.com`), authenticated with the same claude.ai account,
+and the bridge pairs them. The containers don't need to reach each other, and
+the Chrome container needs no Claude Code install. Claude Code chooses the
+bridge itself; current versions don't offer a local-socket alternative.
+
+Because pairing is by account, Chrome on your Mac is also a candidate if it's
+signed in to the same account. Pin Claude to the container's browser, as in step 5
+below.
+
+### Setup
+
+1. Start Chrome (it's part of `docker compose up -d`) and open
+   https://localhost:3001. Accept the self-signed certificate.
+2. The Claude extension is installed and pinned to the toolbar automatically.
+   Click it and sign in with the same claude.ai account Claude Code uses.
+3. Log in to any sites you want Claude to use. The logins persist.
+4. Set `CLAUDE_CHROME=1` in `local/.env` and run `docker compose up -d`.
+5. Pin the browser. In the Claude session, ask it to list connected browsers.
+   Put the container Chrome's `deviceId` in `CLAUDE_CHROME_PAIRED_DEVICE_ID` in
+   `local/.env`, then run `docker compose up -d`.
+
+The extension is force-installed by a Chrome policy baked into the image
+(`chrome/root/etc/opt/chrome/policies/managed/claude-extension.json`) and updates
+itself from the Chrome Web Store. Because of that policy, Chrome shows "Managed by
+your organization" and won't let you remove the extension. That's expected.
+
+Claude runs with `--dangerously-skip-permissions`, so it doesn't ask before acting
+in the browser. Sites you block in the extension's settings stay blocked.
+
+### Looking less like a bot
+
+This is a normal, headed Google Chrome with a persistent profile and real logins,
+which already looks far more like a person than headless automation does.
+
+`CHROME_MAC_UA=1` in `local/chrome.env` swaps the user agent string for a
+macOS one with Chrome's real major version. It changes only that string:
+`navigator.platform`, client hints and fonts still say Linux. Some bot detection
+scores that mismatch as more suspicious than an honest Linux Chrome, so try each
+setting on the sites you care about. Apply it with `docker compose up -d chrome`.

@@ -26,23 +26,29 @@ services:
       - ${LOCAL_DIR:-../local}/workspace:/workspace
     networks: [agents]
 
-  # --- Phase 2: a real Chrome, viewable over web VNC, driven by Claude in Chrome.
-  # chrome:
-  #   image: lscr.io/linuxserver/chrome:latest
-  #   container_name: claude-whatsapp-chrome
-  #   restart: unless-stopped
-  #   shm_size: 1gb
-  #   security_opt: [seccomp:unconfined]
-  #   environment:
-  #     PUID: "1000"
-  #     PGID: "1000"
-  #     TZ: ${TZ:-Europe/London}
-  #   ports:
-  #     - 127.0.0.1:3000:3000   # http VNC
-  #     - 127.0.0.1:3001:3001   # https VNC
-  #   volumes:
-  #     - ${LOCAL_DIR:-../local}/data/chrome:/config
-  #   networks: [agents]
+  # --- A real Chrome, viewable in a browser at https://localhost:3001 and driven
+  # by Claude through the Claude in Chrome extension (signed in to the same
+  # claude.ai account; see README "Chrome").
+  chrome:
+    build:
+      context: chrome
+    image: claude-whatsapp-chrome:latest
+    container_name: claude-whatsapp-chrome
+    hostname: claude-chrome
+    restart: unless-stopped
+    shm_size: 1gb
+    security_opt: [seccomp:unconfined]
+    env_file:   # its own file, so Chrome never sees the secrets in .env
+      - path: ${LOCAL_DIR:-../local}/chrome.env
+        required: false
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+    ports:
+      - 127.0.0.1:${CHROME_PORT:-3001}:3001   # HTTPS web desktop, this Mac only
+    volumes:
+      - ${LOCAL_DIR:-../local}/data/chrome:/config
+    networks: [agents]
 
 networks:
   agents: {}
