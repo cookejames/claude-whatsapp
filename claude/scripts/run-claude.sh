@@ -7,6 +7,7 @@
 #   CLAUDE_REMOTE_CONTROL_NAME  optional Remote Control session name
 #   CLAUDE_EXTRA_ARGS  anything else to append
 #   CLAUDE_AUTO_CONFIRM_CHANNELS  1 = answer the development-channels warning automatically
+#   CLAUDE_DAILY_RESET HH:MM = start a fresh conversation once a day (container TZ)
 set -uo pipefail
 cd /workspace || exit 1
 
@@ -25,15 +26,49 @@ auto_confirm_channels() {
   done
 }
 
+# --- Daily reset ---------------------------------------------------------------
+# Once today's reset time has passed, the next launch skips --continue. If Claude
+# is running, the watcher ends it once the conversation has been quiet for
+# 10 minutes, so a reset never cuts off an exchange in progress.
+reset_at=${CLAUDE_DAILY_RESET:-}
+reset_stamp="$CLAUDE_CONFIG_DIR/.last-daily-reset"
+loop_pid=$$
+if [[ -n "$reset_at" && ! "$reset_at" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
+  echo "!! CLAUDE_DAILY_RESET='$reset_at' is not HH:MM; daily reset disabled"
+  reset_at=
+fi
+
+reset_due() {
+  [[ -n "$reset_at" && ! "$(date +%H:%M)" < "$reset_at" ]] &&
+    [[ "$(cat "$reset_stamp" 2>/dev/null)" != "$(date +%F)" ]]
+}
+
+session_idle() {
+  ! find "$CLAUDE_CONFIG_DIR/projects/-workspace" -name '*.jsonl' -mmin -10 2>/dev/null | grep -q .
+}
+
+daily_reset_watcher() {
+  while sleep 60; do
+    reset_due && session_idle && pkill -TERM -x -P "$loop_pid" claude
+  done
+}
+[[ -n "$reset_at" ]] && daily_reset_watcher &
+
 while true; do
   sync-mcp.sh || echo "!! sync-mcp failed (continuing)"
+  fresh=0
+  if reset_due; then
+    echo "==> daily reset: starting a fresh conversation"
+    date +%F > "$reset_stamp"
+    fresh=1
+  fi
   args=(--dangerously-skip-permissions)
   for c in $channels; do args+=(--dangerously-load-development-channels "$c"); done
   [[ "${CLAUDE_CHROME:-0}" == 1 ]] && args+=(--chrome)
   if [[ "${CLAUDE_REMOTE_CONTROL:-1}" == 1 ]]; then
     args+=(--remote-control ${CLAUDE_REMOTE_CONTROL_NAME:+"$CLAUDE_REMOTE_CONTROL_NAME"})
   fi
-  if [[ "${CLAUDE_CONTINUE:-1}" == 1 ]] && compgen -G "$CLAUDE_CONFIG_DIR/projects/-workspace/*.jsonl" >/dev/null; then
+  if [[ "${CLAUDE_CONTINUE:-1}" == 1 && $fresh == 0 ]] && compgen -G "$CLAUDE_CONFIG_DIR/projects/-workspace/*.jsonl" >/dev/null; then
     args+=(--continue)
   fi
   [[ "${CLAUDE_AUTO_CONFIRM_CHANNELS:-1}" == 1 ]] && auto_confirm_channels &

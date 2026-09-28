@@ -34,6 +34,7 @@ survives restarts and rebuilds.
 │               └─ run-claude.sh (restart loop)                                │
 │                    ├─ sync-mcp.sh          (before every launch)             │
 │                    ├─ auto-confirm dev-channels warning                      │
+│                    ├─ daily reset watcher  (CLAUDE_DAILY_RESET)              │
 │                    └─ claude --dangerously-skip-permissions                  │
 │                              --dangerously-load-development-channels …       │
 │                              --remote-control [name] [--continue]            │
@@ -72,6 +73,20 @@ from `/exit` or a crash. Before each launch it re-syncs MCP servers from
 `install.yaml`. It resumes the previous conversation (`--continue`) and, in the
 background, accepts the "Loading development channels" warning so no one has to
 be at the terminal.
+
+**Daily reset.** With `CLAUDE_DAILY_RESET=04:00` (the default in the template),
+the first launch after 04:00 each day starts a new conversation instead of
+resuming. If Claude is already running then, a background watcher ends it once
+the chat has been quiet for 10 minutes, and the loop starts it fresh. That keeps
+the context small and stops different people's threads from building up in one
+long conversation. Nothing durable is lost: the `CLAUDE.md` files and the notes
+in `/workspace` are reloaded, and old conversations stay in
+`local/data/claude/projects/`. If the container was down at the reset time, the
+reset happens on its next start. The date of the last reset is kept in
+`local/data/claude/.last-daily-reset`.
+
+Between resets, Claude compacts the conversation automatically when it nears
+the context limit, and you can run `/compact` yourself at any time.
 
 **Public vs private.** The git repo (`repo/`) holds only generic, shareable
 material. Everything personal lives in a sibling `local/` folder that is never
@@ -225,6 +240,7 @@ runtime:               # applied when the container starts
 | --- | --- | --- |
 | `TZ` | `Europe/London` | Container time zone |
 | `CLAUDE_CONTINUE` | `1` | Resume the previous conversation when Claude restarts |
+| `CLAUDE_DAILY_RESET` | | `HH:MM` (container `TZ`): start a fresh conversation once a day, after 10 quiet minutes. Empty disables it. The template sets `04:00` |
 | `CLAUDE_CHANNELS` | WhatsApp plugin | Space-separated channel plugins to load |
 | `CLAUDE_AUTO_CONFIRM_CHANNELS` | `1` | Accept the development-channels warning automatically |
 | `CLAUDE_REMOTE_CONTROL` | `1` | Enable Remote Control |
@@ -251,6 +267,7 @@ runtime:               # applied when the container starts
 | New MCP server missing | Check `docker compose logs claude` for `!! … not valid YAML`. Otherwise `/exit` to re-sync. |
 | `.env` change ignored | Run `docker compose up -d` (a restart doesn't reload env). |
 | Session stuck on a prompt | Attach with `tmux attach -t claude` and answer it. |
+| Claude forgot something from yesterday | The daily reset started a new conversation. Ask Claude to keep lasting facts in `/workspace` notes or `CLAUDE.md`, or clear `CLAUDE_DAILY_RESET`. |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 
 ## Security
