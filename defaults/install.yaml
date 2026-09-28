@@ -14,4 +14,7 @@ runtime:          # applied on every container start: `docker compose restart` t
   plugins:
     - whatsapp-channel@whatsapp-claude-plugin
   skills: []
-  mcp: {}          # name -> server config, see local template for examples
+  mcp:             # name -> server config, see local template for examples
+    browser:       # Camoufox in the camoufox container (Playwright MCP)
+      type: http
+      url: http://camoufox:8931/mcp

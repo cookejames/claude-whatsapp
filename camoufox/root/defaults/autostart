@@ -1,0 +1,2 @@
+# Started in the desktop session. Keeps the browser MCP server running.
+/usr/local/bin/browser-session

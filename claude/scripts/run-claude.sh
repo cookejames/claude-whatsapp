@@ -2,7 +2,6 @@
 # Runs inside tmux. Restarts Claude whenever it exits so WhatsApp stays connected.
 #   CLAUDE_CHANNELS    space-separated channel plugins to load
 #   CLAUDE_CONTINUE    1 = resume the previous conversation on restart
-#   CLAUDE_CHROME      1 = pass --chrome (phase 2)
 #   CLAUDE_REMOTE_CONTROL       1 = enable Remote Control (continue from claude.ai / the app)
 #   CLAUDE_REMOTE_CONTROL_NAME  optional Remote Control session name
 #   CLAUDE_EXTRA_ARGS  anything else to append
@@ -64,7 +63,6 @@ while true; do
   fi
   args=(--dangerously-skip-permissions)
   for c in $channels; do args+=(--dangerously-load-development-channels "$c"); done
-  [[ "${CLAUDE_CHROME:-0}" == 1 ]] && args+=(--chrome)
   if [[ "${CLAUDE_REMOTE_CONTROL:-1}" == 1 ]]; then
     args+=(--remote-control ${CLAUDE_REMOTE_CONTROL_NAME:+"$CLAUDE_REMOTE_CONTROL_NAME"})
   fi

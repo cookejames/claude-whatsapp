@@ -26,28 +26,28 @@ services:
       - ${LOCAL_DIR:-../local}/workspace:/workspace
     networks: [agents]
 
-  # --- A real Chrome, viewable in a browser at https://localhost:3001 and driven
-  # by Claude through the Claude in Chrome extension (signed in to the same
-  # claude.ai account; see README "Chrome").
-  chrome:
+  # --- Camoufox (anti-detect Firefox) on a web desktop at https://localhost:3001,
+  # driven by Claude through Playwright MCP at http://camoufox:8931/mcp on the
+  # private network (see README "Browser").
+  camoufox:
     build:
-      context: chrome
-    image: claude-whatsapp-chrome:latest
-    container_name: claude-whatsapp-chrome
-    hostname: claude-chrome
+      context: camoufox
+    image: claude-whatsapp-camoufox:latest
+    container_name: claude-whatsapp-camoufox
+    hostname: camoufox
     restart: unless-stopped
     shm_size: 1gb
     security_opt: [seccomp:unconfined]
-    env_file:   # its own file, so Chrome never sees the secrets in .env
-      - path: ${LOCAL_DIR:-../local}/chrome.env
+    env_file:   # its own file, so the browser never sees the secrets in .env
+      - path: ${LOCAL_DIR:-../local}/camoufox.env
         required: false
     environment:
       PUID: "1000"
       PGID: "1000"
     ports:
-      - 127.0.0.1:${CHROME_PORT:-3001}:3001   # HTTPS web desktop, this Mac only
+      - 127.0.0.1:${BROWSER_PORT:-3001}:3001   # HTTPS web desktop, this Mac only
     volumes:
-      - ${LOCAL_DIR:-../local}/data/chrome:/config
+      - ${LOCAL_DIR:-../local}/data/camoufox:/config
     networks: [agents]
 
 networks:

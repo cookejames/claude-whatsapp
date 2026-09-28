@@ -18,7 +18,7 @@ survives restarts and rebuilds.
 - [Configuration reference](#configuration-reference)
 - [Troubleshooting](#troubleshooting)
 - [Security](#security)
-- [Chrome](#chrome)
+- [Browser](#browser)
 
 ## How it works
 
@@ -39,17 +39,16 @@ survives restarts and rebuilds.
 │                              --dangerously-load-development-channels …       │
 │                              --remote-control [name] [--continue]            │
 │                         ├─ whatsapp-channel MCP server (Bun)                 │
-│                         └─ Claude in Chrome tools (--chrome) ──────┐         │
+│                         └─ browser MCP client ─────────────────────┐         │
 └────────────────────────────────────────────────────────────────────┼─────────┘
-        ▲                                   ▲                        │ wss
-        │ tmux attach                       │ Remote Control         ▼
-   you, in a terminal                claude.ai/code or the     Anthropic browser
-                                     Claude app                bridge (claude.ai
-                                                               account)
-                                                                     ▲ wss
-┌──────────────────────── container: claude-whatsapp-chrome ─────────┼─────────┐
-│ linuxserver/chrome: Google Chrome on a web desktop                 │         │
-│   └─ Claude in Chrome extension, signed in to the same account ────┘         │
+        ▲                                   ▲                        │ HTTP, private
+        │ tmux attach                       │ Remote Control         │ network only
+   you, in a terminal                claude.ai/code or the           ▼
+                                     Claude app
+┌──────────────────────── container: claude-whatsapp-camoufox ─────────────────┐
+│ web desktop (Selkies)                                                        │
+│   └─ browser-session → Playwright MCP (:8931) → Camoufox                     │
+│                        fixed fingerprint, persistent profile                 │
 └──────────────────────────────────────────────────────────────────────────────┘
         ▲
         │ https://localhost:3001 (this Mac only)
@@ -67,9 +66,8 @@ separate.
 **Startup sequence.** When the container starts, `entrypoint.sh`:
 
 1. Creates any missing files in `/config` from the templates.
-2. Marks onboarding (including the Claude in Chrome intro) complete and
-   `/workspace` as trusted in `.claude.json`, so no first-run screens block the
-   session.
+2. Marks onboarding complete and `/workspace` as trusted in `.claude.json`, so
+   no first-run screens block the session.
 3. Rebuilds `settings.json` from three layers: what Claude saved itself, then
    `defaults/settings.json`, then `local/config/settings.json`. Later layers win.
 4. Links the memory files: `defaults/CLAUDE.md` becomes Claude's user memory, and
@@ -100,11 +98,10 @@ reset happens on its next start. The date of the last reset is kept in
 Between resets, Claude compacts the conversation automatically when it nears
 the context limit, and you can run `/compact` yourself at any time.
 
-**Chrome.** A second container runs a real Google Chrome that you view in your
-browser. Claude drives it through the Claude in Chrome extension. The two
-containers don't talk to each other directly: Claude Code and the extension both
-connect to Anthropic's browser bridge using the same claude.ai account, and the
-bridge pairs them. See [Chrome](#chrome).
+**Browser.** A second container runs Camoufox, a Firefox build that presents a
+consistent, realistic device fingerprint, on a desktop you view in your browser.
+Claude drives it through the Playwright MCP server in that container. See
+[Browser](#browser).
 
 **Public vs private.** The git repo (`repo/`) holds only generic, shareable
 material. Everything personal lives in a sibling `local/` folder that is never
@@ -119,13 +116,13 @@ claude-whatsapp/
 ├── repo/                        git repository (public-safe)
 │   ├── docker-compose.yml
 │   ├── .env.example             documents every env option
-│   ├── chrome.env.example       documents the Chrome container's options
+│   ├── camoufox.env.example     documents the browser container's options
 │   ├── claude/
 │   │   ├── Dockerfile           Debian + Homebrew, Node, Bun, uv, tmux, Claude Code
 │   │   └── scripts/             entrypoint, installers, restart loop, MCP sync
-│   ├── chrome/
-│   │   ├── Dockerfile           linuxserver/chrome, extension policy, user-agent wrapper
-│   │   └── root/                files copied into the Chrome image
+│   ├── camoufox/
+│   │   ├── Dockerfile           web desktop + Camoufox + Playwright MCP
+│   │   └── root/                browser-session and browser-mcp.py launchers
 │   └── defaults/                baked into the image at /opt/defaults
 │       ├── install.yaml         base packages, WhatsApp marketplace and plugin
 │       ├── CLAUDE.md            generic WhatsApp assistant behaviour
@@ -134,11 +131,12 @@ claude-whatsapp/
 │       └── templates/           starting files for local/config
 └── local/                       private: never committed
     ├── .env                     options and secrets → claude container env vars
-    ├── chrome.env               Chrome container options (never sees .env)
+    ├── camoufox.env             browser container options (never sees .env)
     ├── config/        → /config           install.yaml, CLAUDE.md, settings.json, skills/
     ├── data/claude/   → ~/.claude         login, plugins, MCP config, conversations
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
-    ├── data/chrome/   → Chrome's /config  Chrome profile: logins, cookies, extension
+    ├── data/camoufox/ → browser /config   desktop settings; browser/ holds the
+    │                                      profile (logins, cookies) and fingerprint
     └── workspace/     → /workspace        Claude's working directory and notes
 ```
 
@@ -174,13 +172,13 @@ That creates `../local` from the templates. Then:
 
 5. Run `/login` and sign in with your Claude account, then `/exit`. The loop
    restarts Claude signed in. Don't use `claude setup-token`: channels,
-   Remote Control and Chrome integration need a full login.
+   Remote Control need a full login.
 6. Run `/whatsapp-channel:configure 447700900123`, using the bot's number with
    country code and no `+`. On the bot phone, go to **Settings → Linked devices →
    Link a device → Link with phone number instead** and enter the code shown.
 7. Run `/whatsapp-channel:access` to allowlist the numbers that may talk to Claude.
 8. Detach with `Ctrl-b d`. Claude keeps running.
-9. Optionally, set up [Chrome](#chrome).
+9. Log in to the sites Claude should use in the [Browser](#browser).
 
 ## Everyday use
 
@@ -192,7 +190,7 @@ That creates `../local` from the templates. Then:
 | Restart just Claude | Type `/exit` in the session |
 | See startup and install logs | `docker compose logs -f claude` |
 | Get a shell in the container | `docker compose exec claude bash` |
-| See or use Claude's Chrome | Open https://localhost:3001 (accept the self-signed certificate) |
+| See or use Claude's browser | Open https://localhost:3001 (accept the self-signed certificate) |
 | Update Claude Code | `docker compose build --no-cache && docker compose up -d` (the auto-updater is off) |
 | Stop or start everything | `docker compose down` / `docker compose up -d` |
 
@@ -204,7 +202,7 @@ That creates `../local` from the templates. Then:
 | `install.yaml` → other `runtime` (plugins, skills), `settings.json`, skills folders | | ✓ | ✓ | ✓ |
 | `CLAUDE.md` files | ✓\* | ✓ | ✓ | ✓ |
 | `local/.env` | | | ✓ (recreates) | ✓ |
-| `local/chrome.env` | | | ✓ (recreates Chrome) | ✓ |
+| `local/camoufox.env` | | | ✓ (recreates the browser) | ✓ |
 | `install.yaml` → `build`, anything in `repo/` | | | | ✓ |
 
 \* `CLAUDE.md` files are read when a session starts, so an `/exit` picks them up.
@@ -271,20 +269,21 @@ runtime:               # applied when the container starts
 | `CLAUDE_AUTO_CONFIRM_CHANNELS` | `1` | Accept the development-channels warning automatically |
 | `CLAUDE_REMOTE_CONTROL` | `1` | Enable Remote Control |
 | `CLAUDE_REMOTE_CONTROL_NAME` | | Remote Control session name |
-| `CLAUDE_CHROME` | `0` | Start with `--chrome` so Claude can drive the Chrome container |
-| `CLAUDE_CHROME_PAIRED_DEVICE_ID` | | Pin Claude to one browser by its extension device id (see [Chrome](#chrome)) |
 | `CLAUDE_EXTRA_ARGS` | | Extra arguments for `claude` |
 | *anything else* | | Available to MCP `${VAR}` placeholders and to Claude's shell, for example `HA_MCP_URL` |
 
-### Chrome options (`local/chrome.env`)
+### Browser options (`local/camoufox.env`)
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `TZ` | `Europe/London` | Chrome's time zone (keep it the same as yours) |
-| `CHROME_MAC_UA` | `0` | Give Chrome a macOS user agent matching its real version (see the caveat in [Chrome](#chrome)) |
-| `CHROME_CLI` | | Extra Chrome flags. Values can't contain spaces |
+| `TZ` | `Europe/London` | The browser's time zone (keep it the same as yours) |
+| `BROWSER_OS` | `macos` | Fingerprint OS: `macos`, `windows` or `linux`. Used only when the fingerprint is first created |
+| `BROWSER_LOCALE` | `en-GB` | Fingerprint locale. Used only when the fingerprint is first created |
+| `BROWSER_PASSWORD_MANAGER` | `1` | Let Firefox save and fill site passwords. Camoufox turns this off by default |
+| `BROWSER_START_URL` | `about:home` | Page opened when the container starts |
+| `SELKIES_MANUAL_WIDTH`, `SELKIES_MANUAL_HEIGHT` | 1920×1080 in the template | Fixed desktop size. Unset, it follows the size of the window you view it in |
 | `CUSTOM_USER`, `PASSWORD` | | Basic auth for the web desktop |
-| `CHROME_PORT` | `3001` | Host port, set in your shell or `repo/.env` (not `chrome.env`) |
+| `BROWSER_PORT` | `3001` | Host port, set in your shell or `repo/.env` (not `camoufox.env`) |
 
 ### Memory and settings
 
@@ -305,10 +304,9 @@ runtime:               # applied when the container starts
 | `.env` change ignored | Run `docker compose up -d` (a restart doesn't reload env). |
 | Session stuck on a prompt | Attach with `tmux attach -t claude` and answer it. |
 | Claude forgot something from yesterday | The daily reset started a new conversation. Ask Claude to keep lasting facts in `/workspace` notes or `CLAUDE.md`, or clear `CLAUDE_DAILY_RESET`. |
-| Claude says "Browser extension is not connected" | Open https://localhost:3001 and check that Chrome is running, the extension is installed and signed in to the same claude.ai account as Claude Code. If several browsers are connected, set `CLAUDE_CHROME_PAIRED_DEVICE_ID`. |
-| Claude drove the Chrome on your Mac | Both browsers are signed in to the same account. Pin the container's browser with `CLAUDE_CHROME_PAIRED_DEVICE_ID`. |
-| Extension missing from Chrome | It installs a few seconds after Chrome starts and needs access to the Chrome Web Store. Check `chrome://policy` in that Chrome for the `ExtensionSettings` policy. |
-| Chrome says the profile is in use | Chrome didn't shut down cleanly. `docker compose restart chrome`. |
+| Browser window closed or missing | Ask Claude to open any page, or run `docker compose restart camoufox`. |
+| Browser tools fail with "Failed to launch the browser" | The profile is locked or the browser crashed. `docker compose restart camoufox`, and check `docker compose logs camoufox`. |
+| A site starts blocking the browser | Delete that site's cookies in the browser and retry. If it persists, a new fingerprint may help: delete `local/data/camoufox/browser/fingerprint.json` and restart (sites will see a new device). |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 
 ## Security
@@ -324,61 +322,70 @@ runtime:               # applied when the container starts
   anywhere else with the same number.
 - Secrets belong in `local/.env` and are referenced as `${VAR}`. Never put them
   in `repo/`.
-- Whatever you log in to in Claude's Chrome, anyone on the WhatsApp allowlist can
-  use through Claude. Log in only to accounts you're happy to share that way.
-- The Chrome web desktop has no password by default and is published on
-  `127.0.0.1` only. Set `CUSTOM_USER`/`PASSWORD` in `local/chrome.env` if other
+- Whatever you log in to in Claude's browser, anyone on the WhatsApp allowlist
+  can use through Claude. Log in only to accounts you're happy to share that way.
+- The browser desktop has no password by default and is published on
+  `127.0.0.1` only. Set `CUSTOM_USER`/`PASSWORD` in `local/camoufox.env` if other
   users share your Mac. The desktop has a terminal with passwordless `sudo`.
-- Chrome runs with `--no-sandbox` (required in the container), so the container
-  is the only isolation. Don't use it for general browsing.
+- Saved passwords are in the profile (`local/data/camoufox/browser/profile`),
+  encrypted with a key stored next to them, because there's no primary password
+  (one would lock the browser after every restart until you typed it). Anyone who
+  can read that folder can recover them, so keep FileVault on and don't sync it
+  to cloud storage.
+- The Playwright MCP endpoint (`camoufox:8931`) has no authentication. It's only
+  on the private compose network and isn't published to the Mac; keep it that way.
 
-## Chrome
+## Browser
 
-The `chrome` service runs Google Chrome
-([linuxserver/chrome](https://docs.linuxserver.io/images/docker-chrome/)) on a
-desktop you open at https://localhost:3001. Its profile, including logins,
-cookies and the extension, lives in `local/data/chrome`, so it survives rebuilds.
-Claude drives it with the Claude in Chrome tools.
+The `camoufox` service runs [Camoufox](https://github.com/daijro/camoufox), a
+Firefox build for automation that presents a realistic, self-consistent device
+fingerprint (platform, GPU, screen, fonts and so on), on a desktop you open at
+https://localhost:3001. Claude drives it with the Playwright MCP server
+([@playwright/mcp](https://github.com/microsoft/playwright-mcp)) running in the
+same container, which the `claude` container reaches at
+`http://camoufox:8931/mcp` as the `browser` MCP server (declared in
+`defaults/install.yaml`).
 
-### How Claude reaches it
+### Why Camoufox
 
-Claude Code and the extension each open a WebSocket to Anthropic's browser bridge
-(`bridge.claudeusercontent.com`), authenticated with the same claude.ai account,
-and the bridge pairs them. The containers don't need to reach each other, and
-the Chrome container needs no Claude Code install. Claude Code chooses the
-bridge itself; current versions don't offer a local-socket alternative.
+Sites with strict bot management (Tesco's Akamai check, for example) block a
+stock Chrome in Docker even when a person logs in by hand: with no GPU, Arm
+hardware and few fonts, the environment itself looks automated. Camoufox fakes
+those properties inside the browser engine, where page scripts can't see the
+change, and hides the automation protocol from the page. It still isn't
+guaranteed; if a site blocks it, see Troubleshooting.
 
-Because pairing is by account, Chrome on your Mac is also a candidate if it's
-signed in to the same account. Pin Claude to the container's browser, as in step 5
-below.
+### How it works
 
-### Setup
+- `browser-session` runs from the desktop's autostart. It keeps
+  `browser-mcp.py` running and opens the browser at `BROWSER_START_URL`, so the
+  window is there for you to use even before Claude has.
+- `browser-mcp.py` starts Playwright MCP pointed at the Camoufox binary. On first
+  run it generates a fingerprint for `BROWSER_OS` and `BROWSER_LOCALE` and saves
+  it to `local/data/camoufox/browser/fingerprint.json`. Every later start reuses
+  it, so sites always see the same device.
+- The profile (`local/data/camoufox/browser/profile`) keeps logins, cookies and
+  saved passwords across restarts and rebuilds.
+- Every MCP connection shares that one browser (`--shared-browser-context`), so
+  Claude restarting doesn't open a second browser.
+- Camoufox ships with Firefox's password manager disabled by policy. With
+  `BROWSER_PASSWORD_MANAGER=1`, `browser-mcp.py` re-enables it on each start
+  (the `PasswordManagerEnabled` and `OfferToSaveLogins` policies, plus the
+  `signon.*` prefs in the profile's `user.js`).
+- Camoufox and Playwright MCP are pinned in `camoufox/Dockerfile`
+  (`CAMOUFOX_VERSION`, `PLAYWRIGHT_MCP_VERSION`). Upgrade them together and
+  test, since Playwright and Camoufox must stay compatible.
 
-1. Start Chrome (it's part of `docker compose up -d`) and open
-   https://localhost:3001. Accept the self-signed certificate.
-2. The Claude extension is installed and pinned to the toolbar automatically.
-   Click it and sign in with the same claude.ai account Claude Code uses.
-3. Log in to any sites you want Claude to use. The logins persist.
-4. Set `CLAUDE_CHROME=1` in `local/.env` and run `docker compose up -d`.
-5. Pin the browser. In the Claude session, ask it to list connected browsers.
-   Put the container Chrome's `deviceId` in `CLAUDE_CHROME_PAIRED_DEVICE_ID` in
-   `local/.env`, then run `docker compose up -d`.
+### Logging in to sites
 
-The extension is force-installed by a Chrome policy baked into the image
-(`chrome/root/etc/opt/chrome/policies/managed/claude-extension.json`) and updates
-itself from the Chrome Web Store. Because of that policy, Chrome shows "Managed by
-your organization" and won't let you remove the extension. That's expected.
+1. Open https://localhost:3001 and accept the self-signed certificate.
+2. Log in to each site by hand, ticking "keep me signed in" where offered.
+3. If a site logs you out often, let Firefox save the password when it offers,
+   or choose "Never save" for sites Claude shouldn't be able to log in to.
+   Firefox fills the login form itself, so Claude clicks "Sign in" without ever
+   seeing the password.
+4. Tell Claude what the site is for. If it later needs a login, a 2FA code or a
+   human check, it asks you on WhatsApp to do it on this desktop.
 
-Claude runs with `--dangerously-skip-permissions`, so it doesn't ask before acting
-in the browser. Sites you block in the extension's settings stay blocked.
-
-### Looking less like a bot
-
-This is a normal, headed Google Chrome with a persistent profile and real logins,
-which already looks far more like a person than headless automation does.
-
-`CHROME_MAC_UA=1` in `local/chrome.env` swaps the user agent string for a
-macOS one with Chrome's real major version. It changes only that string:
-`navigator.platform`, client hints and fonts still say Linux. Some bot detection
-scores that mismatch as more suspicious than an honest Linux Chrome, so try each
-setting on the sites you care about. Apply it with `docker compose up -d chrome`.
+You can use the desktop while Claude isn't browsing. Avoid clicking around while
+Claude is working, since you'd both be driving the same window.

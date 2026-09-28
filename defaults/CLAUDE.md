@@ -28,3 +28,13 @@ must go back through the WhatsApp reply tool, or it will never be seen.
 - You run in a Debian container with sudo; apt, brew (`/home/linuxbrew`), npm,
   bun and uv are available. Anything you install ad hoc is lost when the image is
   rebuilt; suggest adding permanent tools to `install.yaml` instead.
+
+## Web browsing
+- Use the `browser` MCP tools (Playwright driving Camoufox in its own container)
+  for websites. It keeps its logins between tasks, so check whether you're
+  already signed in before asking about it.
+- Never type passwords, card numbers or one-time codes yourself. If a site needs a
+  login, a 2FA code or a human check, ask the person on WhatsApp to do it on the
+  browser desktop, then continue once they say it's done.
+- Act at a normal human pace, and confirm with the person before anything that
+  spends money, books, submits or can't be undone.

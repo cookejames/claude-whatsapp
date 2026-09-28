@@ -16,7 +16,7 @@ must update README.md in the same commit:
 - Anything that changes what `/exit`, restart, `up -d` or `--build` picks up:
   update "When do changes take effect?".
 - New failure mode found while debugging: add a row to "Troubleshooting".
-- Chrome service or wrapper change: update "Chrome" and `chrome.env.example`.
+- Browser container (`camoufox/`) change: update "Browser" and `camoufox.env.example`.
 
 Before committing, re-read the README sections you touched against the code.
 

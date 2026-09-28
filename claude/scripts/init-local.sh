@@ -7,7 +7,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 local_dir=${1:-${LOCAL_DIR:-$repo/../local}}
 templates="$repo/defaults/templates"
 
-mkdir -p "$local_dir"/{config/skills,data/claude,data/whatsapp,data/chrome,workspace}
+mkdir -p "$local_dir"/{config/skills,data/claude,data/whatsapp,data/camoufox,workspace}
 local_dir=$(cd "$local_dir" && pwd)
 
 for f in install.yaml CLAUDE.md settings.json; do
@@ -19,7 +19,7 @@ for f in install.yaml CLAUDE.md settings.json; do
   fi
 done
 
-for pair in ".env.example:.env" "chrome.env.example:chrome.env"; do
+for pair in ".env.example:.env" "camoufox.env.example:camoufox.env"; do
   src=${pair%%:*} dst=${pair#*:}
   if [[ ! -e "$local_dir/$dst" ]]; then
     cp "$repo/$src" "$local_dir/$dst"
