@@ -1,5 +1,19 @@
 # claude-whatsapp
 
+Is OpenClaw or Hermes just too heavyweight for your needs but you still want to 
+chat to Claude over WhatsApp? This is a very simple bridge runs Claude CLI in a
+docker and bridges WhatsApp to it. 
+
+The motivation is simple, OpenClaw or Hermes are complex, frequently changing,
+and breaking projects. My needs are much simpler and on the desktop Claude can 
+now handle most of them. I wanted to share that setup with my wife and family to
+answer practical problems such as grab a recipe from our family notion database
+and add it to our online shopping basket. This does that while keeping Claude in
+a safe docker all of its own alongside a browser (Camoufox) so that it only has 
+access to volumes shared with it and no other credentials. The agent has its own
+WhatsApp number and it will only respond to people or in groups that have been 
+whitelisted.
+
 Chat with Claude over WhatsApp. This project runs Claude Code in a Docker
 container with the
 [WhatsApp channel plugin](https://github.com/Rich627/whatsapp-claude-plugin).
