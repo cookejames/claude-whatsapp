@@ -19,10 +19,12 @@ services:
         required: false
     environment:
       DISABLE_AUTOUPDATER: "1"   # update Claude by rebuilding the image
+      GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND: file   # no OS keyring in a container
     volumes:
       - ${LOCAL_DIR:-../local}/config:/config
       - ${LOCAL_DIR:-../local}/data/claude:/home/claude/.claude
       - ${LOCAL_DIR:-../local}/data/whatsapp:/home/claude/.whatsapp-channel
+      - ${LOCAL_DIR:-../local}/data/gws:/home/claude/.config/gws   # Google Workspace CLI login
       - ${LOCAL_DIR:-../local}/workspace:/workspace
     networks: [agents]
 

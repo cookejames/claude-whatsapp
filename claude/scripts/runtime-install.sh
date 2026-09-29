@@ -49,7 +49,8 @@ repos_dir="$CLAUDE_CONFIG_DIR/skill-repos"
 skills_dir="$CLAUDE_CONFIG_DIR/skills"
 mkdir -p "$repos_dir" "$skills_dir"
 
-yq eval-all -o=json -I=0 '.runtime.skills // [] | .[]' "${files[@]}" | grep -v '^---$' | awk 'NF && !seen[$0]++' |
+# Several entries may share one repo (one per skill); clone or pull it once per run.
+declare -A synced=()
 while read -r entry; do
   url=$(jq -r '.git // empty' <<<"$entry")
   [[ -z "$url" ]] && continue
@@ -58,11 +59,14 @@ while read -r entry; do
   repo_name=$(basename "${url%.git}")
   dest="$repos_dir/$repo_name"
 
-  if [[ -d "$dest/.git" ]]; then
-    git -C "$dest" pull --ff-only -q || echo "!! could not update $url"
-  else
-    echo "==> clone skills $url"
-    git clone -q ${ref:+--branch "$ref"} --depth 1 "$url" "$dest" || { echo "!! clone failed $url"; continue; }
+  if [[ -z "${synced[$dest]:-}" ]]; then
+    if [[ -d "$dest/.git" ]]; then
+      git -C "$dest" pull --ff-only -q || echo "!! could not update $url"
+    else
+      echo "==> clone skills $url"
+      git clone -q ${ref:+--branch "$ref"} --depth 1 "$url" "$dest" || { echo "!! clone failed $url"; continue; }
+    fi
+    synced[$dest]=1
   fi
 
   src="$dest${path:+/$path}"
@@ -75,7 +79,7 @@ while read -r entry; do
       [[ -f "$s/SKILL.md" ]] && ln -sfn "${s%/}" "$skills_dir/$(basename "$s")"
     done
   fi
-done
+done < <(yq eval-all -o=json -I=0 '.runtime.skills // [] | .[]' "${files[@]}" | grep -v '^---$' | awk 'NF && !seen[$0]++')
 
 sync-mcp.sh
 

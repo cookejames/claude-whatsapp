@@ -33,6 +33,7 @@ survives restarts and rebuilds.
 - [Troubleshooting](#troubleshooting)
 - [Security](#security)
 - [Browser](#browser)
+- [Google Workspace](#google-workspace)
 
 ## How it works
 
@@ -149,6 +150,7 @@ claude-whatsapp/
     ├── config/        → /config           install.yaml, CLAUDE.md, settings.json, skills/
     ├── data/claude/   → ~/.claude         login, plugins, MCP config, conversations
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
+    ├── data/gws/      → ~/.config/gws     Google Workspace CLI OAuth client and login
     ├── data/camoufox/ → browser /config   desktop settings; browser/ holds the
     │                                      profile (logins, cookies) and fingerprint
     └── workspace/     → /workspace        Claude's working directory and notes
@@ -266,6 +268,10 @@ runtime:               # applied when the container starts
   `local/.env`, so secrets never go in `install.yaml`. If you remove a server from
   `install.yaml`, it's removed too. Servers added by hand with `claude mcp add`
   are left alone.
+- **Git skills.** Each entry clones the repo into `local/data/claude/skill-repos/`
+  (once per run, however many entries share it) and links the skill into
+  `~/.claude/skills`. For a repo with many skills, list one entry per skill you
+  want, as in [Google Workspace](#google-workspace).
 - **Local skills.** To add one, put a folder containing a `SKILL.md` in
   `local/config/skills/`. Shareable skills go in `repo/defaults/skills/`.
 - **Tools available to MCP servers:** `npx`, `uvx`, `bun` and `brew`. Anything
@@ -284,6 +290,7 @@ runtime:               # applied when the container starts
 | `CLAUDE_REMOTE_CONTROL` | `1` | Enable Remote Control |
 | `CLAUDE_REMOTE_CONTROL_NAME` | | Remote Control session name |
 | `CLAUDE_EXTRA_ARGS` | | Extra arguments for `claude` |
+| `GWS_SCOPES` | Gmail read-only | Comma-separated OAuth scope URLs that `gws-login.sh` requests (see [Google Workspace](#google-workspace)) |
 | *anything else* | | Available to MCP `${VAR}` placeholders and to Claude's shell, for example `HA_MCP_URL` |
 
 ### Browser options (`local/camoufox.env`)
@@ -321,6 +328,9 @@ runtime:               # applied when the container starts
 | Browser window closed or missing | Ask Claude to open any page, or run `docker compose restart camoufox`. |
 | Browser tools fail with "Failed to launch the browser" | The profile is locked or the browser crashed. `docker compose restart camoufox`, and check `docker compose logs camoufox`. |
 | A site starts blocking the browser | Delete that site's cookies in the browser and retry. If it persists, a new fingerprint may help: delete `local/data/camoufox/browser/fingerprint.json` and restart (sites will see a new device). |
+| `gws` says it isn't logged in, or `invalid_grant` | The login was revoked or expired, or the scopes changed. Run `docker compose exec -it claude gws-login.sh` again. |
+| `gws-login.sh` hangs after pasting the URL | The pasted address must be the whole `http://localhost:…/?code=…` URL from the same login attempt. Run the script again and use the new URL. |
+| Sign-in fails with `Error 400: invalid_scope` naming a Keep scope | Google doesn't allow Keep scopes through a user sign-in; the Keep API only works with a Workspace service account and domain-wide delegation. Remove the Keep scope from `GWS_SCOPES`. |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 
 ## Security
@@ -334,6 +344,11 @@ runtime:               # applied when the container starts
   channel plugin downloaded from the internet. Only list channel plugins you trust.
 - Only one client can hold a WhatsApp link at a time. Don't run the plugin
   anywhere else with the same number.
+- The Google Workspace login gives Claude your account's access for the granted
+  scopes. Per-person rules (who may read mail, whose calendar new events go
+  to) are instructions in `local/config/CLAUDE.md`, not limits Google enforces,
+  because everyone's requests run through one login. Emails, invites and notes
+  are untrusted input. The login and its encryption key are in `local/data/gws`.
 - Secrets belong in `local/.env` and are referenced as `${VAR}`. Never put them
   in `repo/`.
 - Whatever you log in to in Claude's browser, anyone on the WhatsApp allowlist
@@ -403,3 +418,84 @@ guaranteed; if a site blocks it, see Troubleshooting.
 
 You can use the desktop while Claude isn't browsing. Avoid clicking around while
 Claude is working, since you'd both be driving the same window.
+
+## Google Workspace
+
+The [Google Workspace CLI](https://github.com/googleworkspace/cli) (`gws`) gives
+Claude Gmail, Calendar and the other Workspace APIs from the shell, and
+its [agent skills](https://github.com/googleworkspace/cli/blob/main/docs/skills.md)
+teach Claude how to use it. It's optional: declare it in
+`local/config/install.yaml`.
+
+```yaml
+build:
+  npm:
+    - "@googleworkspace/cli@0.22.5"
+runtime:
+  skills:   # one entry per skill you want; the repo is cloned once
+    - {git: https://github.com/googleworkspace/cli, path: skills/gws-shared}
+    - {git: https://github.com/googleworkspace/cli, path: skills/gws-gmail}
+    - {git: https://github.com/googleworkspace/cli, path: skills/gws-calendar}
+```
+
+Pick skills that match the scopes you grant, and leave out ones Claude shouldn't
+use (for example `gws-gmail-send` if it may only draft). `gws-shared` is needed
+by all of them.
+
+### One-time Google Cloud setup
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create a
+   project (under your Workspace organisation if you have one).
+2. Enable the APIs you'll use, for example the Gmail API and Google Calendar API.
+   (Google Keep isn't available this way: its scopes can't be granted by a user
+   sign-in.)
+3. Configure the OAuth consent screen. With Google Workspace choose **Internal**:
+   no verification, and logins don't expire. With a personal Gmail account it has
+   to be **External**; add yourself as a test user and set the app to **In
+   production**, because logins made in Testing mode expire after 7 days.
+4. Create an OAuth client ID of type **Desktop app** and download its JSON as
+   `local/data/gws/client_secret.json`.
+
+### Logging in
+
+Set `GWS_SCOPES` in `local/.env` (full scope URLs, comma-separated; see
+`.env.example`), run `docker compose up -d`, then:
+
+```bash
+docker compose exec -it claude gws-login.sh
+```
+
+It prints a Google sign-in URL. Open it on the Mac and approve. Google then
+redirects to a `http://localhost:…` page that fails to load: `gws` is waiting
+for it inside the container, where the Mac's browser can't reach. Copy that
+whole address, paste it into the script, and it completes the login. The login is
+kept (encrypted, with a file-based key since the container has no keyring) in
+`local/data/gws` and survives rebuilds.
+
+To change what Claude may do, edit `GWS_SCOPES`, recreate the container
+(`docker compose up -d`) and run `gws-login.sh` again. Adjust the skills and
+your `CLAUDE.md` rules to match.
+
+### Drafts without sending
+
+Gmail has no scope for drafts that doesn't also allow sending (`gmail.compose`
+covers both). To keep Claude to drafts, add deny rules for the sending commands
+to `local/config/settings.json`. Claude Code enforces deny rules even with
+`--dangerously-skip-permissions`:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(gws gmail +send:*)", "Bash(gws gmail +reply:*)",
+      "Bash(gws gmail +reply-all:*)", "Bash(gws gmail +forward:*)",
+      "Bash(gws gmail users messages send:*)", "Bash(gws gmail users drafts send:*)"
+    ]
+  }
+}
+```
+
+They match command prefixes, so they're a guardrail against mistakes, not a
+security boundary: a determined workaround (a script, another tool) could still
+send. Say in your `CLAUDE.md` that Claude must never send, too.
+

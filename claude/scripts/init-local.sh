@@ -7,7 +7,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 local_dir=${1:-${LOCAL_DIR:-$repo/../local}}
 templates="$repo/defaults/templates"
 
-mkdir -p "$local_dir"/{config/skills,data/claude,data/whatsapp,data/camoufox,workspace}
+mkdir -p "$local_dir"/{config/skills,data/claude,data/whatsapp,data/camoufox,data/gws,workspace}
 local_dir=$(cd "$local_dir" && pwd)
 
 for f in install.yaml CLAUDE.md settings.json; do
