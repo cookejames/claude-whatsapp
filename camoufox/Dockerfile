@@ -1,6 +1,6 @@
 # Camoufox (anti-detect Firefox) on a web desktop, driven by Claude through
 # Playwright MCP served over HTTP on the private compose network.
-#   https://localhost:3001  the desktop, to watch, log in or pass a challenge
+#   https://localhost:3002  the desktop, to watch, log in or pass a challenge
 #   http://camoufox:8931/mcp  Playwright MCP, for the claude container only
 FROM lscr.io/linuxserver/baseimage-selkies:debiantrixie
 

@@ -66,7 +66,7 @@ survives restarts and rebuilds.
 │                        fixed fingerprint, persistent profile                 │
 └──────────────────────────────────────────────────────────────────────────────┘
         ▲
-        │ https://localhost:3001 (this Mac only)
+        │ https://localhost:3002 (this Mac only)
    you, logging in to sites, watching Claude browse
 ```
 
@@ -206,7 +206,7 @@ That creates `../local` from the templates. Then:
 | Restart just Claude | Type `/exit` in the session |
 | See startup and install logs | `docker compose logs -f claude` |
 | Get a shell in the container | `docker compose exec claude bash` |
-| See or use Claude's browser | Open https://localhost:3001 (accept the self-signed certificate) |
+| See or use Claude's browser | Open https://localhost:3002 (accept the self-signed certificate) |
 | Update Claude Code | `docker compose build --no-cache && docker compose up -d` (the auto-updater is off) |
 | Stop or start everything | `docker compose down` / `docker compose up -d` |
 
@@ -304,7 +304,7 @@ runtime:               # applied when the container starts
 | `BROWSER_START_URL` | `about:home` | Page opened when the container starts |
 | `SELKIES_MANUAL_WIDTH`, `SELKIES_MANUAL_HEIGHT` | 1920×1080 in the template | Fixed desktop size. Unset, it follows the size of the window you view it in |
 | `CUSTOM_USER`, `PASSWORD` | | Basic auth for the web desktop |
-| `BROWSER_PORT` | `3001` | Host port, set in your shell or `repo/.env` (not `camoufox.env`) |
+| `BROWSER_PORT` | `3002` | Host port, set in your shell or `repo/.env` (not `camoufox.env`) |
 
 ### Memory and settings
 
@@ -369,7 +369,7 @@ runtime:               # applied when the container starts
 The `camoufox` service runs [Camoufox](https://github.com/daijro/camoufox), a
 Firefox build for automation that presents a realistic, self-consistent device
 fingerprint (platform, GPU, screen, fonts and so on), on a desktop you open at
-https://localhost:3001. Claude drives it with the Playwright MCP server
+https://localhost:3002. Claude drives it with the Playwright MCP server
 ([@playwright/mcp](https://github.com/microsoft/playwright-mcp)) running in the
 same container, which the `claude` container reaches at
 `http://camoufox:8931/mcp` as the `browser` MCP server (declared in
@@ -407,7 +407,7 @@ guaranteed; if a site blocks it, see Troubleshooting.
 
 ### Logging in to sites
 
-1. Open https://localhost:3001 and accept the self-signed certificate.
+1. Open https://localhost:3002 and accept the self-signed certificate.
 2. Log in to each site by hand, ticking "keep me signed in" where offered.
 3. If a site logs you out often, let Firefox save the password when it offers,
    or choose "Never save" for sites Claude shouldn't be able to log in to.

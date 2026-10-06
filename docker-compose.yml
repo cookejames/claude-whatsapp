@@ -28,7 +28,7 @@ services:
       - ${LOCAL_DIR:-../local}/workspace:/workspace
     networks: [agents]
 
-  # --- Camoufox (anti-detect Firefox) on a web desktop at https://localhost:3001,
+  # --- Camoufox (anti-detect Firefox) on a web desktop at https://localhost:3002,
   # driven by Claude through Playwright MCP at http://camoufox:8931/mcp on the
   # private network (see README "Browser").
   camoufox:
@@ -47,7 +47,7 @@ services:
       PUID: "1000"
       PGID: "1000"
     ports:
-      - 127.0.0.1:${BROWSER_PORT:-3001}:3001   # HTTPS web desktop, this Mac only
+      - 127.0.0.1:${BROWSER_PORT:-3002}:3001   # HTTPS web desktop, this Mac only
     volumes:
       - ${LOCAL_DIR:-../local}/data/camoufox:/config
     networks: [agents]
