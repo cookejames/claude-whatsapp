@@ -1,0 +1,9 @@
+# Paths under local/ that backup.sh skips: caches that are rebuilt on demand.
+# One `aws s3 sync --exclude` pattern per line, relative to local/ (* also matches /).
+*.DS_Store
+data/camoufox/browser/profile/cache2/*
+data/camoufox/browser/profile/startupCache/*
+data/camoufox/browser/profile/storage/default/*/cache/*
+data/camoufox/.cache/*
+data/camoufox/.XDG/*/cache/*
+data/claude/cache/*

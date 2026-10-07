@@ -4,3 +4,4 @@ local/
 data/
 workspace/
 .DS_Store
+backup/backup.env

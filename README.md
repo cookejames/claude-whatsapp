@@ -34,6 +34,7 @@ survives restarts and rebuilds.
 - [Security](#security)
 - [Browser](#browser)
 - [Google Workspace](#google-workspace)
+- [Backups](#backups)
 
 ## How it works
 
@@ -138,6 +139,7 @@ claude-whatsapp/
 │   ├── camoufox/
 │   │   ├── Dockerfile           web desktop + Camoufox + Playwright MCP
 │   │   └── root/                browser-session and browser-mcp.py launchers
+│   ├── backup/                  daily S3 backup of local/ (runs on the Mac, not in Docker)
 │   └── defaults/                baked into the image at /opt/defaults
 │       ├── install.yaml         base packages, WhatsApp marketplace and plugin
 │       ├── CLAUDE.md            generic WhatsApp assistant behaviour
@@ -332,6 +334,8 @@ runtime:               # applied when the container starts
 | `gws-login.sh` hangs after pasting the URL | The pasted address must be the whole `http://localhost:…/?code=…` URL from the same login attempt. Run the script again and use the new URL. |
 | Sign-in fails with `Error 400: invalid_scope` naming a Keep scope | Google doesn't allow Keep scopes through a user sign-in; the Keep API only works with a Workspace service account and domain-wide delegation. Remove the Keep scope from `GWS_SCOPES`. |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
+| Backup log says "no access key in Keychain" | `backup/setup.sh` hasn't run, or the Keychain item was deleted. Run `backup/setup.sh` again; it creates a new key if none is stored. |
+| Backup fails with `AccessDenied` | The stored key was deleted or deactivated in IAM, or the `local/` prefix was changed. Delete the Keychain items (`security delete-generic-password -s claude-whatsapp-backup -a access-key-id`, then `-a secret-access-key`), remove the old key in IAM, and run `backup/setup.sh`. |
 
 ## Security
 
@@ -499,3 +503,52 @@ They match command prefixes, so they're a guardrail against mistakes, not a
 security boundary: a determined workaround (a script, another tool) could still
 send. Say in your `CLAUDE.md` that Claude must never send, too.
 
+## Backups
+
+`backup/` copies `local/` to a private S3 bucket once a day. The bucket keeps
+every version of every file for 30 days, so you can restore a file as it was on
+any recent day, or see how a skill changed. It runs on the Mac through launchd,
+not in Docker. The containers never get the bucket name or the keys, and the
+`backup/` folder is kept out of the image.
+
+What it covers: everything in `local/` (`.env`, `config/`, `data/`,
+`workspace/`) except caches that rebuild themselves, which are listed in
+`backup/excludes.txt` (mostly the browser cache). Files are stored one object per
+file, uncompressed, and encrypted at rest by S3 (SSE-S3). Uploads use TLS only.
+
+| Piece | What it does |
+| --- | --- |
+| `backup-infra.yaml` | CloudFormation: versioned bucket `claude-whatsapp-backup-<account id>` with public access blocked, and an IAM user that can only list, read and write under `local/`. That user can't delete old versions or change the bucket, so a leaked key can't erase the history. |
+| `setup.sh` | Deploys the stack with your admin AWS credentials, writes `backup/backup.env` (gitignored), stores the backup user's access key in the macOS Keychain (service `claude-whatsapp-backup`), and schedules `backup.sh` daily at 02:00. Safe to re-run. |
+| `backup.sh` | `aws s3 sync --delete` of `local/` using only the Keychain key. Only changed files upload. A deleted file gets a delete marker and its earlier versions stay. Logs to `~/Library/Logs/claude-whatsapp-backup.log`. |
+
+Set up (needs the AWS CLI and an admin login, e.g. `aws login`):
+
+```bash
+backup/setup.sh      # deploy, store the key, schedule
+backup/backup.sh     # first backup now
+```
+
+A missed 02:00 run happens when the Mac next wakes. To run it on demand later:
+`launchctl kickstart gui/$(id -u)/local.claude-whatsapp.backup`.
+
+Restore (with your admin credentials):
+
+```bash
+# Everything, latest versions
+aws s3 sync s3://<bucket>/local/ ./restored-local/
+
+# One file's history, then a specific version
+aws s3api list-object-versions --bucket <bucket> --prefix local/config/skills/<skill>/SKILL.md \
+  --query 'Versions[].[LastModified,VersionId]' --output text
+aws s3api get-object --bucket <bucket> --key local/config/skills/<skill>/SKILL.md \
+  --version-id <id> SKILL.md
+```
+
+You can also browse versions in the S3 console with "Show versions".
+`aws s3 sync` doesn't keep file permissions, symlinks or empty folders. It
+spots changes by size and timestamp, not by content.
+
+Cost: under a few cents a month for a few hundred MB plus 30 days of old
+versions. To change how long old versions are kept, set `BACKUP_RETENTION_DAYS`
+in `backup/backup.env` and run `backup/setup.sh` again.
