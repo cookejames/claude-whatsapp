@@ -53,8 +53,16 @@ RUN curl -fsSL https://bun.sh/install | bash && bun --version
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && uv --version
 RUN curl -fsSL https://claude.ai/install.sh | bash && claude --version
 
+# --- Voice transcription: faster-whisper for whisper-transcribe.sh ----------
+ARG FASTER_WHISPER_VERSION=1.2.1
+RUN sudo install -d -o "${USERNAME}" -g "${USERNAME}" /opt/whisper \
+    && uv venv --no-cache -q /opt/whisper \
+    && uv pip install --no-cache -q --python /opt/whisper/bin/python "faster-whisper==${FASTER_WHISPER_VERSION}"
+
 # --- Declared packages (defaults + private local list) ---------------------
 COPY --chmod=755 claude/scripts/ /usr/local/bin/
+# The WhatsApp plugin looks for its transcription script at this fixed path.
+RUN ln -s /usr/local/bin/whisper-transcribe.sh "/home/${USERNAME}/whisper-transcribe.sh"
 COPY defaults/ /opt/defaults/
 COPY --from=local install.yaml /tmp/install.local.yaml
 RUN /usr/local/bin/build-install.sh /opt/defaults/install.yaml /tmp/install.local.yaml

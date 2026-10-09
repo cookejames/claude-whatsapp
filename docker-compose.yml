@@ -25,6 +25,7 @@ services:
       - ${LOCAL_DIR:-../local}/data/claude:/home/claude/.claude
       - ${LOCAL_DIR:-../local}/data/whatsapp:/home/claude/.whatsapp-channel
       - ${LOCAL_DIR:-../local}/data/gws:/home/claude/.config/gws   # Google Workspace CLI login
+      - ${LOCAL_DIR:-../local}/data/whisper:/home/claude/.cache/whisper   # voice transcription models
       - ${LOCAL_DIR:-../local}/workspace:/workspace
     networks: [agents]
 

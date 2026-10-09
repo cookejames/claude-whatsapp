@@ -46,6 +46,7 @@ survives restarts and rebuilds.
 │ tini → entrypoint.sh                                                         │
 │          ├─ prepares ~/.claude from defaults + /config                       │
 │          ├─ runtime-install.sh (marketplaces, plugins, skills, MCP)          │
+│          ├─ whisper model download (background)                              │
 │          └─ tmux session "claude"                                            │
 │               └─ run-claude.sh (restart loop)                                │
 │                    ├─ sync-mcp.sh          (before every launch)             │
@@ -55,6 +56,7 @@ survives restarts and rebuilds.
 │                              --dangerously-load-development-channels …       │
 │                              --remote-control [name] [--continue]            │
 │                         ├─ whatsapp-channel MCP server (Bun)                 │
+│                         │    └─ ~/whisper-transcribe.sh (voice notes)        │
 │                         └─ browser MCP client ─────────────────────┐         │
 └────────────────────────────────────────────────────────────────────┼─────────┘
         ▲                                   ▲                        │ HTTP, private
@@ -91,7 +93,9 @@ separate.
 5. Links skills from `defaults/skills/` and `local/config/skills/`.
 6. Runs `runtime-install.sh` to add marketplaces, install plugins, clone and pull
    git skills, and sync MCP servers.
-7. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
+7. Starts downloading the voice transcription model in the background, if it
+   isn't cached yet (see *Voice notes* below).
+8. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
    for as long as that session exists.
 
 **Restart loop.** `run-claude.sh` relaunches Claude whenever it exits, whether
@@ -113,6 +117,23 @@ reset happens on its next start. The date of the last reset is kept in
 
 Between resets, Claude compacts the conversation automatically when it nears
 the context limit, and you can run `/compact` yourself at any time.
+
+**Voice notes.** The plugin transcribes each incoming voice note by running
+`~/whisper-transcribe.sh <file>`, and Claude receives the text with the audio
+attached. In this image that script runs
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper) on the CPU, entirely
+inside the container: no audio leaves your Mac. (The plugin's own reference
+script uses mlx-whisper, which needs macOS on Apple Silicon and can't run in a
+Linux container.) The default model, `large-v3-turbo` (about 1.6 GB, cached in
+`local/data/whisper/`), is multilingual and transcribes at roughly real-time
+speed, so a 30-second note takes about 30 seconds. Set `WHISPER_MODEL=small` for
+about 4× faster but less accurate transcription. A note that takes longer than
+`WHISPER_TIMEOUT_MS` (180 s by default) to transcribe arrives as plain audio. To
+test it:
+
+```bash
+docker compose exec claude whisper-transcribe.sh /path/to/note.ogg
+```
 
 **Browser.** A second container runs Camoufox, a Firefox build that presents a
 consistent, realistic device fingerprint, on a desktop you view in your browser.
@@ -153,6 +174,7 @@ claude-whatsapp/
     ├── data/claude/   → ~/.claude         login, plugins, MCP config, conversations
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
     ├── data/gws/      → ~/.config/gws     Google Workspace CLI OAuth client and login
+    ├── data/whisper/  → ~/.cache/whisper  voice transcription models
     ├── data/camoufox/ → browser /config   desktop settings; browser/ holds the
     │                                      profile (logins, cookies) and fingerprint
     └── workspace/     → /workspace        Claude's working directory and notes
@@ -293,6 +315,10 @@ runtime:               # applied when the container starts
 | `CLAUDE_REMOTE_CONTROL_NAME` | | Remote Control session name |
 | `CLAUDE_EXTRA_ARGS` | | Extra arguments for `claude` |
 | `GWS_SCOPES` | Gmail read-only | Comma-separated OAuth scope URLs that `gws-login.sh` requests (see [Google Workspace](#google-workspace)) |
+| `WHISPER_MODEL` | `large-v3-turbo` | faster-whisper model for voice notes, e.g. `small`, `medium`, `distil-large-v3` (English only). A new model downloads when the container starts |
+| `WHISPER_LANGUAGE` | | Language code such as `en`. Empty detects it from each note |
+| `WHISPER_TIMEOUT_MS` | `180000` | Read by the plugin: how long a transcription may take before the note arrives untranscribed |
+| `TRANSCRIPTION_PROVIDER` | `local` | Read by the plugin: `groq` or `openai` sends voice notes to that cloud API instead (with `GROQ_API_KEY` or `OPENAI_API_KEY`) |
 | *anything else* | | Available to MCP `${VAR}` placeholders and to Claude's shell, for example `HA_MCP_URL` |
 
 ### Browser options (`local/camoufox.env`)
@@ -333,6 +359,7 @@ runtime:               # applied when the container starts
 | `gws` says it isn't logged in, or `invalid_grant` | The login was revoked or expired, or the scopes changed. Run `docker compose exec -it claude gws-login.sh` again. |
 | `gws-login.sh` hangs after pasting the URL | The pasted address must be the whole `http://localhost:…/?code=…` URL from the same login attempt. Run the script again and use the new URL. |
 | Sign-in fails with `Error 400: invalid_scope` naming a Keep scope | Google doesn't allow Keep scopes through a user sign-in; the Keep API only works with a Workspace service account and domain-wide delegation. Remove the Keep scope from `GWS_SCOPES`. |
+| Voice notes arrive as audio with no transcript | Run `docker compose exec claude whisper-transcribe.sh <file>` on a note and read the error. Check `docker compose logs claude` for `whisper model ready`, and `~/.whatsapp-channel/diag.log` for `whisper transcription failed` (a timeout means the note was too long for the model: raise `WHISPER_TIMEOUT_MS` or use a smaller `WHISPER_MODEL`). |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 | Backup log says "no access key in Keychain" | `backup/setup.sh` hasn't run, or the Keychain item was deleted. Run `backup/setup.sh` again; it creates a new key if none is stored. |
 | Backup fails with `AccessDenied` | The stored key was deleted or deactivated in IAM, or the `local/` prefix was changed. Delete the Keychain items (`security delete-generic-password -s claude-whatsapp-backup -a access-key-id`, then `-a secret-access-key`), remove the old key in IAM, and run `backup/setup.sh`. |

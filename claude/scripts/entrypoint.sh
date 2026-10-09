@@ -40,6 +40,11 @@ find "$CFG/skills" -maxdepth 1 -xtype l -delete
 
 runtime-install.sh || echo "!! runtime-install reported errors (continuing)"
 
+# --- Fetch the voice transcription model in the background (slow only once) ---
+{ whisper-transcribe.sh --download >/dev/null 2>&1 \
+    && echo "==> whisper model ready (${WHISPER_MODEL:-large-v3-turbo})" \
+    || echo "!! whisper model download failed; the first voice note will retry it"; } &
+
 # --- Start Claude in tmux and stay in the foreground while it runs -----------
 tmux new-session -d -s claude -x 200 -y 50 -c /workspace run-claude.sh
 echo "==> Claude is running. Attach with: docker compose exec claude tmux attach -t claude"
