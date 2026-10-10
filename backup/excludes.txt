@@ -7,3 +7,4 @@ data/camoufox/browser/profile/storage/default/*/cache/*
 data/camoufox/.cache/*
 data/camoufox/.XDG/*/cache/*
 data/claude/cache/*
+data/whisper/*

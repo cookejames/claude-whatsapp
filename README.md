@@ -567,7 +567,7 @@ not in Docker. The containers never get the bucket name or the keys, and the
 
 What it covers: everything in `local/` (`.env`, `config/`, `data/`,
 `workspace/`) except caches that rebuild themselves, which are listed in
-`backup/excludes.txt` (mostly the browser cache). Files are stored one object per
+`backup/excludes.txt` (the browser cache and the voice transcription models). Files are stored one object per
 file, uncompressed, and encrypted at rest by S3 (SSE-S3). Uploads use TLS only.
 
 | Piece | What it does |
