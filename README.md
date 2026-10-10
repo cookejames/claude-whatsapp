@@ -199,6 +199,7 @@ claude-whatsapp/
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
     ├── data/gws/      → ~/.config/gws     Google Workspace CLI OAuth client and login
     ├── data/whisper/  → ~/.cache/whisper  voice transcription models
+    ├── data/ssh/      → ~/.ssh            SSH known_hosts and config (keep keys in workspace/.secrets)
     ├── data/camoufox/ → browser /config   desktop settings; browser/ holds the
     │                                      profile (logins, cookies) and fingerprint
     └── workspace/     → /workspace        Claude's working directory and notes
