@@ -2,6 +2,7 @@
 # Put personal additions in local/config/install.yaml (same schema). Lists are merged.
 build:            # baked into the image: `docker compose build` to apply
   apt:
+    - cron        # scheduled jobs from /config/crontab
     - ffmpeg      # voice notes / media conversion
     - ripgrep
     - python3

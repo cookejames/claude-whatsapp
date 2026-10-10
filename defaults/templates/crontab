@@ -1,0 +1,8 @@
+# Scheduled jobs for user claude, loaded when the container starts.
+# Apply changes now with: docker compose exec claude crontab /config/crontab
+# Times are in the container's TZ (local/.env). Format: min hour day month weekday
+# Output isn't kept, so log what matters; claude-prompt.sh logs to ~/.claude/cron.log.
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Example: ask the assistant for a weekly summary every Saturday at 06:00.
+# 0 6 * * 6 claude-prompt.sh 'Write the weekly summary (see /workspace/notes/weekly.md).'

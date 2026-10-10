@@ -30,6 +30,16 @@ must go back through the WhatsApp reply tool, or it will never be seen.
   bun and uv are available. Anything you install ad hoc is lost when the image is
   rebuilt; suggest adding permanent tools to `install.yaml` instead.
 
+## Scheduled jobs
+- Recurring jobs live in `/config/crontab` (user claude, container time zone)
+  and survive restarts and rebuilds. After editing it, run
+  `crontab /config/crontab` to apply it. Don't rely on `CronCreate` for anything
+  recurring: those jobs end with the session.
+- To have a job ask you to do something, use
+  `claude-prompt.sh '<prompt>'`, which types the prompt into this session. Such
+  prompts arrive in the terminal rather than from WhatsApp, so write each one to
+  say who the results are for, and send them over WhatsApp.
+
 ## Web browsing
 - Use the `browser` MCP tools (Playwright driving Camoufox in its own container)
   for websites. It keeps its logins between tasks, so check whether you're

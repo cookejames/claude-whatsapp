@@ -47,7 +47,8 @@ survives restarts and rebuilds.
 │          ├─ prepares ~/.claude from defaults + /config                       │
 │          ├─ runtime-install.sh (marketplaces, plugins, skills, MCP)          │
 │          ├─ whisper model download (background)                              │
-│          └─ tmux session "claude"                                            │
+│          ├─ cron daemon ← /config/crontab ─┐                                 │
+│          └─ tmux session "claude" ◀────────┘ claude-prompt.sh                │
 │               └─ run-claude.sh (restart loop)                                │
 │                    ├─ sync-mcp.sh          (before every launch)             │
 │                    ├─ auto-confirm dev-channels warning                      │
@@ -95,7 +96,9 @@ separate.
    git skills, and sync MCP servers.
 7. Starts downloading the voice transcription model in the background, if it
    isn't cached yet (see *Voice notes* below).
-8. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
+8. Sets the system time zone from `TZ`, loads `local/config/crontab` as user
+   `claude`'s crontab and starts cron (see *Scheduled jobs* below).
+9. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
    for as long as that session exists.
 
 **Restart loop.** `run-claude.sh` relaunches Claude whenever it exits, whether
@@ -135,6 +138,27 @@ test it:
 docker compose exec claude whisper-transcribe.sh /path/to/note.ogg
 ```
 
+**Scheduled jobs.** `local/config/crontab` holds recurring jobs, in the
+container's `TZ`. It's a normal crontab (the template has an example) and is
+loaded when the container starts, so jobs survive restarts and rebuilds, unlike
+Claude's own `CronCreate` jobs, which end with the session. A job can run any
+command, and `claude-prompt.sh '<prompt>'` types a prompt into the running
+session so Claude does the work with all its tools, MCP servers and WhatsApp:
+
+```
+0 6 * * 6 claude-prompt.sh 'Write the weekly summary and send it to Sam on WhatsApp.'
+```
+
+The prompt arrives as if typed at the terminal: if Claude is busy it's queued,
+and if Claude is restarting the script waits up to 10 minutes. Say in the prompt
+who the result is for, since it doesn't come from a WhatsApp chat. Each prompt
+sent is logged in `local/data/claude/cron.log`. To apply an edited crontab
+without restarting:
+
+```bash
+docker compose exec claude crontab /config/crontab
+```
+
 **Browser.** A second container runs Camoufox, a Firefox build that presents a
 consistent, realistic device fingerprint, on a desktop you view in your browser.
 Claude drives it through the Playwright MCP server in that container. See
@@ -170,7 +194,7 @@ claude-whatsapp/
 └── local/                       private: never committed
     ├── .env                     options and secrets → claude container env vars
     ├── camoufox.env             browser container options (never sees .env)
-    ├── config/        → /config           install.yaml, CLAUDE.md, settings.json, skills/
+    ├── config/        → /config           install.yaml, CLAUDE.md, settings.json, crontab, skills/
     ├── data/claude/   → ~/.claude         login, plugins, MCP config, conversations
     ├── data/whatsapp/ → ~/.whatsapp-channel   WhatsApp link, allowlist, inbox
     ├── data/gws/      → ~/.config/gws     Google Workspace CLI OAuth client and login
@@ -239,6 +263,7 @@ That creates `../local` from the templates. Then:
 | You changed… | `/exit` | `docker compose restart claude` | `docker compose up -d` | `docker compose up -d --build` |
 | --- | :-: | :-: | :-: | :-: |
 | `install.yaml` → `runtime.mcp` | ✓ | ✓ | ✓ | ✓ |
+| `crontab` (or run `crontab /config/crontab` in the container) | | ✓ | ✓ | ✓ |
 | `install.yaml` → other `runtime` (plugins, skills), `settings.json`, skills folders | | ✓ | ✓ | ✓ |
 | `CLAUDE.md` files | ✓\* | ✓ | ✓ | ✓ |
 | `local/.env` | | | ✓ (recreates) | ✓ |
@@ -360,6 +385,7 @@ runtime:               # applied when the container starts
 | `gws-login.sh` hangs after pasting the URL | The pasted address must be the whole `http://localhost:…/?code=…` URL from the same login attempt. Run the script again and use the new URL. |
 | Sign-in fails with `Error 400: invalid_scope` naming a Keep scope | Google doesn't allow Keep scopes through a user sign-in; the Keep API only works with a Workspace service account and domain-wide delegation. Remove the Keep scope from `GWS_SCOPES`. |
 | Voice notes arrive as audio with no transcript | Run `docker compose exec claude whisper-transcribe.sh <file>` on a note and read the error. Check `docker compose logs claude` for `whisper model ready`, and `~/.whatsapp-channel/diag.log` for `whisper transcription failed` (a timeout means the note was too long for the model: raise `WHISPER_TIMEOUT_MS` or use a smaller `WHISPER_MODEL`). |
+| A scheduled job didn't run | Check `docker compose exec claude crontab -l` shows it and `docker compose logs claude` has `crontab loaded` (not `!! /config/crontab is not valid`). Times follow `TZ`. Cron keeps no output, so test the command by hand in `docker compose exec claude bash`; for `claude-prompt.sh` jobs, check `local/data/claude/cron.log`. |
 | Container unhealthy | The health check needs both the tmux session and a `claude` process. Check `docker compose logs claude`. |
 | Backup log says "no access key in Keychain" | `backup/setup.sh` hasn't run, or the Keychain item was deleted. Run `backup/setup.sh` again; it creates a new key if none is stored. |
 | Backup fails with `AccessDenied` | The stored key was deleted or deactivated in IAM, or the `local/` prefix was changed. Delete the Keychain items (`security delete-generic-password -s claude-whatsapp-backup -a access-key-id`, then `-a secret-access-key`), remove the old key in IAM, and run `backup/setup.sh`. |

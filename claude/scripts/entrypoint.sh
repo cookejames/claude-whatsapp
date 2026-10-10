@@ -7,7 +7,7 @@ CFG="$CLAUDE_CONFIG_DIR"
 mkdir -p "$CFG/skills" /config/skills
 
 # --- Seed /config with templates if the local dir is empty -------------------
-for f in install.yaml CLAUDE.md settings.json; do
+for f in install.yaml CLAUDE.md settings.json crontab; do
   [[ -e "/config/$f" ]] || cp "/opt/defaults/templates/$f" "/config/$f"
 done
 
@@ -44,6 +44,19 @@ runtime-install.sh || echo "!! runtime-install reported errors (continuing)"
 { whisper-transcribe.sh --download >/dev/null 2>&1 \
     && echo "==> whisper model ready (${WHISPER_MODEL:-large-v3-turbo})" \
     || echo "!! whisper model download failed; the first voice note will retry it"; } &
+
+# --- Scheduled jobs: cron in the container's TZ, crontab from /config ---------
+if [[ -n "${TZ:-}" && -f "/usr/share/zoneinfo/$TZ" ]]; then
+  sudo ln -sfn "/usr/share/zoneinfo/$TZ" /etc/localtime
+  echo "$TZ" | sudo tee /etc/timezone >/dev/null
+fi
+if crontab /config/crontab; then
+  echo "==> crontab loaded from /config/crontab"
+else
+  echo "!! /config/crontab is not valid; no scheduled jobs"
+  crontab -r 2>/dev/null || true
+fi
+sudo cron
 
 # --- Start Claude in tmux and stay in the foreground while it runs -----------
 tmux new-session -d -s claude -x 200 -y 50 -c /workspace run-claude.sh
