@@ -324,6 +324,24 @@ runtime:               # applied when the container starts
   want, as in [Google Workspace](#google-workspace).
 - **Local skills.** To add one, put a folder containing a `SKILL.md` in
   `local/config/skills/`. Shareable skills go in `repo/defaults/skills/`.
+- **Using a fork of a plugin** (for example while a fix waits to be merged
+  upstream). Add the fork to `runtime.marketplaces` in `local/config/install.yaml`.
+  Local marketplaces are added first, and a fork keeps the upstream
+  marketplace's name, so the fork wins and the default source is skipped
+  ("already added from another source" in the logs). Plugins aren't updated on
+  start, so switch an existing install over once, in the container, then
+  restart Claude with `/exit`:
+
+  ```bash
+  claude plugin marketplace remove whatsapp-claude-plugin
+  claude plugin marketplace add you/whatsapp-claude-plugin
+  claude plugin install whatsapp-channel@whatsapp-claude-plugin
+  ```
+
+  To go back, remove the entry from `install.yaml` and run the same commands with
+  the upstream repo. After pushing to the fork, apply it with
+  `claude plugin marketplace update` and
+  `claude plugin update whatsapp-channel@whatsapp-claude-plugin`, then `/exit`.
 - **Tools available to MCP servers:** `npx`, `uvx`, `bun` and `brew`. Anything
   installed ad hoc inside the container is lost on rebuild, so declare it under
   `build:` instead.

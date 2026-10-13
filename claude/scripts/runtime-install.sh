@@ -20,6 +20,10 @@ list() {
 }
 
 # --- Marketplaces ------------------------------------------------------------
+# /config entries go first, so a local fork wins over a default marketplace of
+# the same name: Claude refuses to add a second source under a name in use.
+local_first=()
+for ((i = ${#files[@]} - 1; i >= 0; i--)); do local_first+=("${files[i]}"); done
 known_markets=$(claude plugin marketplace list --json 2>/dev/null || echo '[]')
 while read -r src; do
   [[ -z "$src" ]] && continue
@@ -27,9 +31,16 @@ while read -r src; do
     claude plugin marketplace update >/dev/null 2>&1 || true
   else
     echo "==> marketplace add $src"
-    claude plugin marketplace add "$src" || echo "!! failed to add marketplace $src"
+    if ! out=$(claude plugin marketplace add "$src" 2>&1); then
+      if grep -q "source doesn't match" <<<"$out"; then
+        echo "    skipped: a marketplace with this name is already added from another source"
+      else
+        echo "!! failed to add marketplace $src: $out"
+      fi
+    fi
   fi
-done < <(list marketplaces)
+done < <(yq eval-all ".runtime.marketplaces // [] | .[]" "${local_first[@]}" |
+  grep -v '^---$' | awk 'NF && !seen[$0]++')
 
 # --- Plugins -----------------------------------------------------------------
 installed=$(claude plugin list --json 2>/dev/null || echo '[]')
