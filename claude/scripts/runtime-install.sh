@@ -72,7 +72,15 @@ while read -r entry; do
 
   if [[ -z "${synced[$dest]:-}" ]]; then
     if [[ -d "$dest/.git" ]]; then
-      git -C "$dest" pull --ff-only -q || echo "!! could not update $url"
+      # These are our own shallow clones: trust them even when Docker Desktop
+      # briefly reports another owner, and update with fetch + reset, since
+      # `pull` on a --depth 1 clone can fail ("did not send all necessary
+      # objects"). Local edits in these copies are overwritten.
+      if git -c safe.directory="$dest" -C "$dest" fetch -q --depth 1 origin "${ref:-HEAD}"; then
+        git -c safe.directory="$dest" -C "$dest" reset -q --hard FETCH_HEAD
+      else
+        echo "!! could not update $url"
+      fi
     else
       echo "==> clone skills $url"
       git clone -q ${ref:+--branch "$ref"} --depth 1 "$url" "$dest" || { echo "!! clone failed $url"; continue; }
