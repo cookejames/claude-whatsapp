@@ -97,6 +97,7 @@ if [[ -f "$pending" ]]; then
     rm -f "$pending"
     before=$(creds_stamp)
     if pane | grep -q "Paste code here"; then
+      tmux send-keys -t claude C-u # clear anything typed into the box
       tmux send-keys -t claude -l -- "$code"
       sleep 1
       tmux send-keys -t claude Enter

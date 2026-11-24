@@ -31,6 +31,13 @@ if ! ready; then
   exit 1
 fi
 
+# Never type into the sign-in screen (Claude is signed out and
+# claude-login-watch.sh is waiting for a code there).
+if tmux capture-pane -p -t claude | grep -q "Paste code here"; then
+  say "!! Claude is signed out (sign-in screen open); not sent: $1"
+  exit 1
+fi
+
 # Send the text literally, then Enter separately: sent together, Claude can
 # treat the Enter as part of a paste and add a newline instead of submitting.
 tmux send-keys -t claude -l -- "$1"
