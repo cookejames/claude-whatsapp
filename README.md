@@ -171,9 +171,12 @@ WhatsApp chat id (yours, as shown on your messages, e.g. `123456789@lid`) and
 WhatsApp plugin, which keeps running while Claude is signed out
 (`whatsapp-send.mjs` talks to the plugin's local socket). Sign in on your phone
 and reply with the code the page shows: the watcher types it into the session
-and confirms. It only accepts a code from that chat, within 10 minutes, and
-only if the part after `#` matches the link it sent; after a link expires it
-waits for you to reply *login* before sending another. The code is never
+and confirms. It only accepts a code from that chat, within 10 minutes of the
+link (and, when the link shows its OAuth state, only if the part after `#`
+matches it); after a link expires it waits for you to reply *login* before
+sending another. To try it without being signed out, run
+`docker compose exec claude claude-login-watch.sh --test`: it sends a link the
+same way, and if you ignore it the current sign-in is untouched. The code is never
 logged; delete your message afterwards (Delete for everyone) if you like.
 Events go to `local/data/claude/login-watch.log`.
 
