@@ -58,6 +58,12 @@ else
 fi
 sudo cron
 
+# --- Sign Claude back in over WhatsApp when its login lapses (opt-in) ---------
+if [[ -n "${LOGIN_ALERT_CHAT:-}" ]]; then
+  { while sleep 60; do claude-login-watch.sh || true; done; } &
+  echo "==> login watcher on: sign-in links go to WhatsApp"
+fi
+
 # --- Start Claude in tmux and stay in the foreground while it runs -----------
 tmux new-session -d -s claude -x 200 -y 50 -c /workspace run-claude.sh
 echo "==> Claude is running. Attach with: docker compose exec claude tmux attach -t claude"

@@ -48,6 +48,7 @@ survives restarts and rebuilds.
 │          ├─ runtime-install.sh (marketplaces, plugins, skills, MCP)          │
 │          ├─ whisper model download (background)                              │
 │          ├─ cron daemon ← /config/crontab ─┐                                 │
+│          ├─ login watcher (LOGIN_ALERT_CHAT)│                                │
 │          └─ tmux session "claude" ◀────────┘ claude-prompt.sh                │
 │               └─ run-claude.sh (restart loop)                                │
 │                    ├─ sync-mcp.sh          (before every launch)             │
@@ -98,7 +99,9 @@ separate.
    isn't cached yet (see *Voice notes* below).
 8. Sets the system time zone from `TZ`, loads `local/config/crontab` as user
    `claude`'s crontab and starts cron (see *Scheduled jobs* below).
-9. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
+9. If `LOGIN_ALERT_CHAT` is set, starts the login watcher in the background
+   (see *Signing in again over WhatsApp* below).
+10. Starts `run-claude.sh` in tmux session `claude`, then waits in the foreground
    for as long as that session exists.
 
 **Restart loop.** `run-claude.sh` relaunches Claude whenever it exits, whether
@@ -158,6 +161,21 @@ without restarting:
 ```bash
 docker compose exec claude crontab /config/crontab
 ```
+
+**Signing in again over WhatsApp.** Claude's sign-in renews itself daily but
+lapses after about four weeks; Claude then wipes the stored tokens and answers
+everything with "Login expired". Set `LOGIN_ALERT_CHAT` in `local/.env` to a
+WhatsApp chat id (yours, as shown on your messages, e.g. `123456789@lid`) and
+`claude-login-watch.sh` checks every minute. When the login has gone it opens
+`/login` in the session and sends the sign-in link to that chat through the
+WhatsApp plugin, which keeps running while Claude is signed out
+(`whatsapp-send.mjs` talks to the plugin's local socket). Sign in on your phone
+and reply with the code the page shows: the watcher types it into the session
+and confirms. It only accepts a code from that chat, within 10 minutes, and
+only if the part after `#` matches the link it sent; after a link expires it
+waits for you to reply *login* before sending another. The code is never
+logged; delete your message afterwards (Delete for everyone) if you like.
+Events go to `local/data/claude/login-watch.log`.
 
 **Browser.** A second container runs Camoufox, a Firefox build that presents a
 consistent, realistic device fingerprint, on a desktop you view in your browser.
@@ -362,6 +380,7 @@ runtime:               # applied when the container starts
 | `WHISPER_MODEL` | `large-v3-turbo` | faster-whisper model for voice notes, e.g. `small`, `medium`, `distil-large-v3` (English only). A new model downloads when the container starts |
 | `WHISPER_LANGUAGE` | | Language code such as `en`. Empty detects it from each note |
 | `WHISPER_TIMEOUT_MS` | `180000` | Read by the plugin: how long a transcription may take before the note arrives untranscribed |
+| `LOGIN_ALERT_CHAT` | | WhatsApp chat id to send Claude sign-in links to, and accept the code back from, when Claude's login lapses (see *Signing in again over WhatsApp*). Empty disables it |
 | `TRANSCRIPTION_PROVIDER` | `local` | Read by the plugin: `groq` or `openai` sends voice notes to that cloud API instead (with `GROQ_API_KEY` or `OPENAI_API_KEY`) |
 | *anything else* | | Available to MCP `${VAR}` placeholders and to Claude's shell, for example `HA_MCP_URL` |
 
@@ -392,6 +411,7 @@ runtime:               # applied when the container starts
 | Symptom | Cause and fix |
 | --- | --- |
 | "Channels are not currently available" | Not logged in. Attach, `/login`, then `/exit`. |
+| "Login expired · Please run /login" | Claude's sign-in lapsed (about every four weeks). With `LOGIN_ALERT_CHAT` set, the link arrives on WhatsApp; otherwise attach and run `/login`. "Please run /login · API Error: 403 … Cloudflare" is different: a one-off block, so retry first. Check `local/data/claude/login-watch.log` if no link arrives. |
 | WhatsApp keeps reconnecting, or "a second session attached" | Something else started the plugin's MCP server. Don't run `claude mcp list` or a second `claude` inside the container; use `/mcp` in the attached session instead. |
 | New MCP server missing | Check `docker compose logs claude` for `!! … not valid YAML`. Otherwise `/exit` to re-sync. |
 | `.env` change ignored | Run `docker compose up -d` (a restart doesn't reload env). |
